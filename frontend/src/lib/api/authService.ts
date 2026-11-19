@@ -14,7 +14,8 @@ export interface AuthResponse {
   message: string;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+import { API_BASE_URL } from "./baseUrl";
+
 const TOKEN_KEY = "LOKI_AUTH_TOKEN";
 const USER_KEY = "LOKI_CURRENT_USER";
 

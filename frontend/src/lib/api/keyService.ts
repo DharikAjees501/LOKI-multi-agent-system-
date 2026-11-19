@@ -10,10 +10,10 @@ export interface ApiKeyItem {
   isPrimary: boolean;
 }
 
+import { API_BASE_URL } from "./baseUrl";
+
 const STORAGE_KEY = "LOKI_API_KEYS_POOL";
 const LEGACY_STORAGE_KEY = "LOKI_GEMINI_API_KEY";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
 class KeyService {
   getKeys(): ApiKeyItem[] {

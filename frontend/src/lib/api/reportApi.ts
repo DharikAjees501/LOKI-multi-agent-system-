@@ -1,6 +1,6 @@
 import { ExecutiveReport } from "@/types";
+import { API_BASE_URL } from "./baseUrl";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 const MOCK_MODE = process.env.NEXT_PUBLIC_MOCK_MODE === "true";
 
 const DEFAULT_EXECUTIVE_REPORT: ExecutiveReport = {

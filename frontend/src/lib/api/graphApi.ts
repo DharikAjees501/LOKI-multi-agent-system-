@@ -1,6 +1,6 @@
 import { GraphNode, GraphEdge } from "@/types";
+import { API_BASE_URL } from "./baseUrl";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 const IS_MOCK_MODE = process.env.NEXT_PUBLIC_MOCK_MODE === "true";
 
 const SWARM_ROLES_LIST: string[] = [

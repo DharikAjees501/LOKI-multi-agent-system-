@@ -1,4 +1,5 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+import { API_BASE_URL } from "./baseUrl";
+
 const IS_MOCK_MODE = process.env.NEXT_PUBLIC_MOCK_MODE === "true";
 
 export interface DocumentUploadResponse {

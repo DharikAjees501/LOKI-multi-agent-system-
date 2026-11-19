@@ -56,7 +56,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"error": True, "detail": "An internal server error occurred.", "path": str(request.url.path)}
     )
 
-# Include API Routers
+# Include API Routers with prefix (/api)
 app.include_router(documents.router, prefix=settings.API_V1_STR)
 app.include_router(scenarios.router, prefix=settings.API_V1_STR)
 app.include_router(graph.router, prefix=settings.API_V1_STR)
@@ -66,6 +66,17 @@ app.include_router(reports.router, prefix=settings.API_V1_STR)
 app.include_router(keys.router, prefix=settings.API_V1_STR)
 app.include_router(auth.router, prefix=settings.API_V1_STR)
 
+# Direct fallback mounts at root / for resilient client routing
+app.include_router(keys.router)
+app.include_router(documents.router)
+app.include_router(scenarios.router)
+app.include_router(graph.router)
+app.include_router(agents.router)
+app.include_router(simulation.router)
+app.include_router(reports.router)
+app.include_router(auth.router)
+
+@app.post("/config/verify-key")
 @app.post(f"{settings.API_V1_STR}/config/verify-key")
 async def verify_key_config_alias(request: Request):
     from app.api.keys import verify_keys_config_route, ConfigVerifyRequest

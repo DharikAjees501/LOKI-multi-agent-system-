@@ -1,7 +1,6 @@
 import { Agent } from "@/types";
 import { keyService } from "./keyService";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+import { API_BASE_URL } from "./baseUrl";
 
 export interface AgentChatMessage {
   id: string;
