@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@theme {
+  --color-base: #F4F8F1;
+  --color-surface: #FFFFFF;
+  --color-raised: #E9F4E3;
+  --color-line: #D4E7C5;
+  --color-ink: #122415;
+  --color-muted: #4E6B53;
+  --color-accent: #42D674;
+  --color-accentInk: #FFFFFF;
+  --color-accent2: #25A64E;
+
+  --font-display: var(--font-inter-tight), "Inter Tight", sans-serif;
+  --font-body: var(--font-inter), "Inter", sans-serif;
+  --font-mono: var(--font-mono), "IBM Plex Mono", monospace;
+
+  --radius-card: 1.25rem;
+}
+
+:root {
+  --background: #F4F8F1;
+  --foreground: #122415;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  background-color: #F4F8F1;
+  color: #122415;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: #F4F8F1;
+  color: #122415;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: rgba(66, 214, 116, 0.25);
+  color: #122415;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C4E1B5;
+  border-radius: 9999px;
+  border: 1px solid #F4F8F1;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes pulseGlowBlue {
+  0%, 100% { box-shadow: 0 0 15px rgba(10, 132, 255, 0.4); }
+  50% { box-shadow: 0 0 25px rgba(10, 132, 255, 0.8); }
+}
+
+@keyframes pulseGlowGreen {
+  0%, 100% { box-shadow: 0 0 15px rgba(66, 214, 116, 0.4); }
+  50% { box-shadow: 0 0 25px rgba(66, 214, 116, 0.8); }
+}
+
+.glow-blue {
+  animation: pulseGlowBlue 3s infinite ease-in-out;
+}
+
+.glow-orange {
+  animation: pulseGlowGreen 3s infinite ease-in-out;
+}
