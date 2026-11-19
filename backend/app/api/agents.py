@@ -5,10 +5,6 @@ import random
 import httpx
 from fastapi import APIRouter, HTTPException, Header
 from typing import List, Optional
-try:
-    import google.generativeai as genai
-except ImportError:
-    genai = None
 from app.models.agent import AgentModel, AgentInterrogateRequest, AgentInterrogateResponse
 from app.services.persona_service import persona_service
 from app.engine.swarm_orchestrator import orchestrator_engine

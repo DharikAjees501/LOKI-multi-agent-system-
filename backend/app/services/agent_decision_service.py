@@ -1,10 +1,6 @@
 import json
 import re
 from typing import Dict, Any, List
-try:
-    import google.generativeai as genai
-except ImportError:
-    genai = None
 from app.models.agent import AgentModel
 from app.models.simulation import AgentDecisionOutput
 from app.prompts.decision import AGENT_DECISION_PROMPT

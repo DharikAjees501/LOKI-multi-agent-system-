@@ -1,10 +1,15 @@
-from fastapi import APIRouter, HTTPException
-from typing import List, Dict, Any
+import asyncio
+from typing import List, Dict, Any, Optional
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
+
 from app.models.simulation import SimulationStateModel, FeedEventModel, RiskVectorModel
 from app.engine.swarm_orchestrator import orchestrator_engine
 from app.services.simulation_service import simulation_service
 from app.services.report_service import report_service
-import asyncio
+from app.services.persona_service import persona_service
+from app.engine.oasis_engine import oasis_engine
+from app.storage.database import get_db_connection
 
 router = APIRouter(tags=["simulation"])
 
@@ -51,9 +56,6 @@ async def reset_simulation(id: str):
 @router.get("/scenarios/{id}/events", response_model=List[FeedEventModel])
 async def get_scenario_events(id: str):
     return simulation_service.get_feed_events(id)
-
-from fastapi import Query
-from app.storage.database import get_db_connection
 
 @router.get("/simulation/feed")
 @router.get("/api/simulation/feed")
@@ -112,11 +114,6 @@ async def get_simulation_feed(
         }
         for r in rows
     ]
-
-from pydantic import BaseModel, Field
-from typing import Optional
-from app.services.persona_service import persona_service
-from app.engine.oasis_engine import oasis_engine
 
 class RunSimulationRequest(BaseModel):
     goal_prompt: Optional[str] = "Predict strategy reaction"

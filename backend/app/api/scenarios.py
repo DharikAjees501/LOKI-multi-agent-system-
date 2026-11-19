@@ -1,7 +1,9 @@
 import os
 import uuid
 import datetime
+import asyncio
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 from typing import List, Optional
 from app.models.scenario import ScenarioModel, ScenarioCreate
 from app.models.graph import ScenarioGraphResponse
@@ -31,9 +33,6 @@ async def create_scenario(payload: ScenarioCreate):
         conn.commit()   
     finally:
         conn.close()
-
-from pydantic import BaseModel
-import asyncio
 
 class CreateAndRunScenarioRequest(BaseModel):
     name: str
