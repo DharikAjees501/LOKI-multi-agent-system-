@@ -1,9 +1,15 @@
 import type { NextConfig } from "next";
 
-const backendUrl =
+let rawUrl =
   process.env.BACKEND_INTERNAL_URL ||
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/api\/?$/, "") ||
+  process.env.NEXT_PUBLIC_API_URL ||
   "http://127.0.0.1:8000";
+
+rawUrl = rawUrl.trim().replace(/\/api\/?$/, "");
+if (!rawUrl.startsWith("http://") && !rawUrl.startsWith("https://")) {
+  rawUrl = `https://${rawUrl}`;
+}
+const backendUrl = rawUrl;
 
 const nextConfig: NextConfig = {
   async rewrites() {
