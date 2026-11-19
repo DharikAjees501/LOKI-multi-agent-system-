@@ -30,12 +30,10 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 20.17.0
+      - key: BACKEND_INTERNAL_URL
+        value: http://swarmlens-backend:10000
       - key: NEXT_PUBLIC_API_URL
-        fromService:
-          type: web
-          name: swarmlens-backend
-          property: host
-        # Render will populate https://${HOST}/api
+        value: /api
 
 databases:
   # 3. Managed PostgreSQL Database
@@ -43,4 +41,3 @@ databases:
     databaseName: swarmlens_db
     user: swarmlens
     plan: free
-
