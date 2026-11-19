@@ -146,7 +146,7 @@ class KeyService {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 35000);
 
       const res = await fetch(`${API_BASE_URL}/keys/verify-single`, {
         method: "POST",
@@ -173,12 +173,15 @@ class KeyService {
           message: errMsg,
         };
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn("API Key Verification server timeout or network warning:", err);
+      const isTimeout = err?.name === "AbortError" || String(err).includes("aborted");
       return {
         valid: false,
         status: "INVALID",
-        message: "Failed to connect to verification server. Please ensure backend is running.",
+        message: isTimeout
+          ? `Verification timed out while contacting ${p.toUpperCase()}. Please try again.`
+          : "Failed to connect to verification server. Please ensure backend is running.",
       };
     }
   }

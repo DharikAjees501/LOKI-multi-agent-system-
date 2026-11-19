@@ -147,7 +147,7 @@ def get_db_connection():
             if pool:
                 import time
                 start_wait = time.time()
-                timeout = 30.0  # pool_timeout = 30s
+                timeout = 10.0  # pool_timeout = 10s before fallback
                 raw_conn = None
 
                 while time.time() - start_wait < timeout:
@@ -182,7 +182,7 @@ def get_db_connection():
                                 is_healthy = False
                             else:
                                 if hasattr(raw_conn, "rollback") and not getattr(raw_conn, "autocommit", False):
-                                    raw_conn.rollback()
+                                     raw_conn.rollback()
                                 raw_conn.autocommit = True
                                 with raw_conn.cursor() as cur:
                                     cur.execute("SELECT 1;")
@@ -202,7 +202,9 @@ def get_db_connection():
 
                     return PGConnectionWrapper(raw_conn, pool=pool)
                 else:
-                    raise TimeoutError("[PostgreSQL Pool]: Connection pool checkout timed out after 30s. No connection available from pool.")
+                    logger.warning("[PostgreSQL Pool]: Pool checkout saturated. Creating fallback direct connection.")
+                    fallback_conn = psycopg2.connect(settings.DATABASE_URL, cursor_factory=AutoParamRealDictCursor)
+                    return PGConnectionWrapper(fallback_conn, pool=None)
             else:
                 raw_conn = psycopg2.connect(settings.DATABASE_URL, cursor_factory=AutoParamRealDictCursor)
                 return PGConnectionWrapper(raw_conn)

@@ -4,6 +4,7 @@ import json
 import random
 import datetime
 import asyncio
+import threading
 import concurrent.futures
 from typing import List, Optional, Dict, Any
 from app.models.agent import AgentModel
@@ -11,6 +12,16 @@ from app.prompts.persona import build_persona_system_prompt
 from app.storage.database import get_db_connection
 from app.core.logging import logger
 from app.engine.llm_client import execute_multi_provider_llm_call, get_active_api_keys
+
+_persona_generation_locks: Dict[str, threading.Lock] = {}
+_locks_meta_lock = threading.Lock()
+_cached_agents_by_scenario: Dict[str, List[AgentModel]] = {}
+
+def _get_scenario_lock(scen_id: str) -> threading.Lock:
+    with _locks_meta_lock:
+        if scen_id not in _persona_generation_locks:
+            _persona_generation_locks[scen_id] = threading.Lock()
+        return _persona_generation_locks[scen_id]
 
 class PersonaService:
     def _fetch_scenario_and_graph_context(self, scenario_id: str) -> Dict[str, Any]:
@@ -442,6 +453,7 @@ Channel must be one of: "BOARDROOM" (for Tier 1), "BOARDROOM" or "COMPLIANCE" (f
         finally:
             conn.close()
 
+        _cached_agents_by_scenario[scenario_id] = agents
         logger.info(f"[PersonaService] Generated and persisted {len(agents)} 100% dynamic domain persona profiles for scenario {scenario_id}.")
         return agents
 
@@ -449,29 +461,59 @@ Channel must be one of: "BOARDROOM" (for Tier 1), "BOARDROOM" or "COMPLIANCE" (f
         return self.generate_personas_for_scenario(scenario_id, total_agents=200)
 
     def get_agents_for_scenario(self, scenario_id: str) -> List[AgentModel]:
+        # 1. In-memory fast path: return cached 200 agents immediately (0ms DB cost)
+        if scenario_id in _cached_agents_by_scenario and len(_cached_agents_by_scenario[scenario_id]) >= 200:
+            return _cached_agents_by_scenario[scenario_id]
+
+        # 2. Query DB with immediate connection release to protect connection pool
         conn = get_db_connection()
+        rows = []
+        latest_posts = {}
         try:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM agents WHERE scenario_id = ? ORDER BY number_id ASC", (scenario_id,))
             rows = cursor.fetchall()
 
-            if not rows or len(rows) < 200:
-                return self.generate_personas_for_scenario(scenario_id, total_agents=200)
-
-            cursor.execute("""
-                SELECT agent_number_id, message 
-                FROM feed_events 
-                WHERE scenario_id = ? AND message IS NOT NULL AND message != '' 
-                ORDER BY round DESC, id DESC
-            """, (scenario_id,))
-            feed_rows = cursor.fetchall()
-            latest_posts = {}
-            for fr in feed_rows:
-                num_id = fr["agent_number_id"]
-                if num_id not in latest_posts:
-                    latest_posts[num_id] = fr["message"]
+            if rows and len(rows) >= 200:
+                cursor.execute("""
+                    SELECT agent_number_id, message 
+                    FROM feed_events 
+                    WHERE scenario_id = ? AND message IS NOT NULL AND message != '' 
+                    ORDER BY round DESC, id DESC
+                """, (scenario_id,))
+                feed_rows = cursor.fetchall()
+                for fr in feed_rows:
+                    num_id = fr["agent_number_id"]
+                    if num_id not in latest_posts:
+                        latest_posts[num_id] = fr["message"]
         finally:
             conn.close()
+
+        # 3. If agents not populated, acquire single-scenario lock to prevent thundering herd
+        if not rows or len(rows) < 200:
+            scen_lock = _get_scenario_lock(scenario_id)
+            with scen_lock:
+                # Check cache again inside lock
+                if scenario_id in _cached_agents_by_scenario and len(_cached_agents_by_scenario[scenario_id]) >= 200:
+                    return _cached_agents_by_scenario[scenario_id]
+
+                # Double check DB count
+                conn2 = get_db_connection()
+                try:
+                    cur2 = conn2.cursor()
+                    cur2.execute("SELECT COUNT(*) as count FROM agents WHERE scenario_id = ?", (scenario_id,))
+                    cnt_row = cur2.fetchone()
+                    count = dict(cnt_row).get("count", 0) if cnt_row else 0
+                finally:
+                    conn2.close()
+
+                if count >= 200:
+                    return self.get_agents_for_scenario(scenario_id)
+
+                # Generate exactly ONCE across all concurrent dashboard requests
+                generated = self.generate_personas_for_scenario(scenario_id, total_agents=200)
+                _cached_agents_by_scenario[scenario_id] = generated
+                return generated
 
         agents: List[AgentModel] = []
         for r in rows:
@@ -522,6 +564,7 @@ Channel must be one of: "BOARDROOM" (for Tier 1), "BOARDROOM" or "COMPLIANCE" (f
                     graphEdges=g_edges
                 )
             )
+        _cached_agents_by_scenario[scenario_id] = agents
         return agents
 
 persona_service = PersonaService()
