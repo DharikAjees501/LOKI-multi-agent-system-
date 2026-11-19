@@ -490,6 +490,8 @@ async def chat_with_report_agent(scenario_id: str, payload: ReportChatRequest):
         recent_turns = payload.history[-4:]
         history_text = "\n".join([f"{h.get('role', 'user').upper()}: {h.get('content', '')}" for h in recent_turns])
 
+    history_block = f"CONVERSATION HISTORY:\n{history_text}" if history_text else ""
+
     # 4. Construct Observer LLM Prompt
     prompt = f"""You are the SwarmLens Executive ReportAgent. Answer the user's question clearly, concisely, and in plain business language based ONLY on the simulation metrics, agent debate transcripts, and uploaded document excerpts provided below.
 
@@ -524,7 +526,7 @@ HIGH-IMPACT AGENT DEBATE POSTS:
 SOURCE DOCUMENT EXCERPTS:
 {doc_excerpts_text}
 
-{"CONVERSATION HISTORY:\n" + history_text if history_text else ""}
+{history_block}
 
 USER QUESTION:
 {user_query}
