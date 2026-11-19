@@ -31,9 +31,9 @@ services:
       - key: NODE_VERSION
         value: 20.17.0
       - key: BACKEND_INTERNAL_URL
-        value: http://swarmlens-backend:10000
+        value: https://swarmlens-backend.onrender.com
       - key: NEXT_PUBLIC_API_URL
-        value: /api
+        value: https://swarmlens-backend.onrender.com/api
 
 databases:
   # 3. Managed PostgreSQL Database

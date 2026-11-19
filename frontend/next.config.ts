@@ -3,16 +3,25 @@ import type { NextConfig } from "next";
 let rawUrl =
   process.env.BACKEND_INTERNAL_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
-  "http://127.0.0.1:8000";
+  "https://swarmlens-backend.onrender.com";
 
 rawUrl = rawUrl.trim().replace(/\/api\/?$/, "");
+
+// Replace unresolvable internal Docker service names with public Render URL
+if (
+  rawUrl === "http://swarmlens-backend:10000" ||
+  rawUrl === "swarmlens-backend" ||
+  rawUrl.includes("swarmlens-backend:10000") ||
+  rawUrl.endsWith("swarmlens-backend")
+) {
+  rawUrl = "https://swarmlens-backend.onrender.com";
+}
 
 if (!rawUrl.startsWith("http://") && !rawUrl.startsWith("https://")) {
   if (rawUrl.includes(".")) {
     rawUrl = `https://${rawUrl}`;
   } else {
-    // Internal Render service name: swarmlens-backend -> http://swarmlens-backend:10000
-    rawUrl = `http://${rawUrl}:10000`;
+    rawUrl = `https://${rawUrl}.onrender.com`;
   }
 }
 const backendUrl = rawUrl;

@@ -2,7 +2,21 @@ import { FeedEvent } from "@/types";
 
 type EventCallback = (event: FeedEvent | any) => void;
 
-const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws/simulation";
+function getWsBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_WS_URL) {
+    return process.env.NEXT_PUBLIC_WS_URL;
+  }
+  if (typeof window !== "undefined") {
+    if (window.location.hostname.includes("onrender.com")) {
+      return "wss://swarmlens-backend.onrender.com/ws/simulation";
+    }
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${window.location.hostname}:8000/ws/simulation`;
+  }
+  return "ws://localhost:8000/ws/simulation";
+}
+
+const WS_BASE_URL = getWsBaseUrl();
 
 class SimulationSocketService {
   private listeners: EventCallback[] = [];
