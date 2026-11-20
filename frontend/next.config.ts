@@ -28,6 +28,11 @@ const backendUrl = rawUrl;
 
 const nextConfig: NextConfig = {
   async rewrites() {
+    // If deployed on Vercel as a unified monorepo without an external backend override,
+    // vercel.json handles edge routing directly to the backend service.
+    if (process.env.VERCEL && !process.env.BACKEND_INTERNAL_URL && !process.env.NEXT_PUBLIC_API_URL) {
+      return [];
+    }
     return [
       {
         source: "/api/:path*",
