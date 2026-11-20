@@ -127,7 +127,6 @@ async def list_models():
             {"id": "gemini-3.8-flash", "object": "model", "owned_by": "google"},
             {"id": "openai/gpt-oss-120b", "object": "model", "owned_by": "groq"},
             {"id": "openai/gpt-oss-20b", "object": "model", "owned_by": "groq"},
-            {"id": "qwen/qwen3.8-27b", "object": "model", "owned_by": "groq"},
             {"id": "gpt-4o-mini", "object": "model", "owned_by": "openai"},
             {"id": "gpt-4o", "object": "model", "owned_by": "openai"},
             {"id": "claude-3-5-sonnet-20241022", "object": "model", "owned_by": "anthropic"}

@@ -152,21 +152,8 @@ async def execute_multi_provider_llm_call(
             async with httpx.AsyncClient(timeout=client_timeout) as client:
                 # --- 1. GROQ PROVIDER ---
                 if provider == "groq" or raw_key.startswith("gsk_"):
-                    # Use strictly OpenAI GPT-OSS models with required full model namespace
+                    # Strictly use OpenAI GPT-OSS models only (120B and 20B)
                     groq_models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
-                    try:
-                        m_res = await client.get(
-                            "https://api.groq.com/openai/v1/models",
-                            headers={"Authorization": f"Bearer {raw_key}"}
-                        )
-                        if m_res.status_code == 200:
-                            avail_data = m_res.json().get("data", [])
-                            avail_ids = [item.get("id") for item in avail_data if item.get("id")]
-                            matched = [m for m in ["openai/gpt-oss-120b", "openai/gpt-oss-20b"] if m in avail_ids]
-                            if matched:
-                                groq_models = matched
-                    except Exception:
-                        pass
                     for m in groq_models:
                         try:
                             res = await client.post(
@@ -202,14 +189,11 @@ async def execute_multi_provider_llm_call(
 
                 # --- 2. GOOGLE GEMINI PROVIDER ---
                 elif provider in ["gemini", "google"] or raw_key.startswith("AIzaSy") or raw_key.startswith("AQ."):
-                    # Verified active Gemini models (strictly zero Gemini 2 models)
+                    # Strictly Gemini 3.5 Flash-Lite and 3.8 Flash (All 1.5 models removed)
                     gemini_models = [
-                        "gemini-1.5-flash",
-                        "gemini-1.5-flash-8b",
-                        "gemini-1.5-pro",
                         "gemini-3.5-flash-lite",
-                        "gemini-3.1-flash-lite",
-                        "gemini-3.8-flash"
+                        "gemini-3.8-flash",
+                        "gemini-3.1-flash-lite"
                     ]
 
                     for m in gemini_models:
@@ -359,7 +343,7 @@ class ProviderEntry:
     def _default_model(self, provider: str) -> str:
         defaults = {
             "groq": "openai/gpt-oss-120b",
-            "gemini": "gemini-1.5-flash",
+            "gemini": "gemini-3.5-flash-lite",
             "openai": "gpt-4o-mini",
             "openrouter": "meta-llama/llama-3.3-70b-instruct",
             "anthropic": "claude-3-5-haiku-20241022"

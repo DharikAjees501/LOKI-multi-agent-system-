@@ -17,8 +17,8 @@ import {
 import { keyService, ApiKeyItem, ProviderType } from "@/lib/api/keyService";
 
 const PROVIDERS: { id: ProviderType; name: string; icon: string; placeholder: string; badge: string; desc: string }[] = [
-  { id: "gemini", name: "Google Gemini", icon: "💎", placeholder: "AIzaSy... or AQ....", badge: "Gemini 1.5", desc: "Gemini 1.5 Flash & Pro" },
-  { id: "groq", name: "Groq", icon: "🚀", placeholder: "gsk_...", badge: "Llama 3.3", desc: "Ultra-fast inference" },
+  { id: "gemini", name: "Google Gemini", icon: "💎", placeholder: "AIzaSy... or AQ....", badge: "Gemini 3.5 & 3.8", desc: "Gemini 3.5 Flash-Lite & 3.8" },
+  { id: "groq", name: "Groq", icon: "🚀", placeholder: "gsk_...", badge: "GPT-OSS", desc: "OpenAI GPT-OSS 120B & 20B" },
   { id: "openai", name: "OpenAI", icon: "⚡", placeholder: "sk-proj-...", badge: "GPT-4o", desc: "GPT-4o & GPT-4o-mini" },
   { id: "anthropic", name: "Anthropic", icon: "🧠", placeholder: "sk-ant-...", badge: "Claude 3.5", desc: "Sonnet & Haiku models" },
   { id: "custom", name: "Custom", icon: "🔑", placeholder: "Enter API key...", badge: "Compatible", desc: "OpenRouter / OpenAI-compat" },
