@@ -3,11 +3,6 @@
 import React, { useState, useEffect } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import {
-  Settings,
-  Sparkles,
-  Sliders,
-  Save,
-  CheckCircle2,
   Key,
   Eye,
   EyeOff,
@@ -16,29 +11,23 @@ import {
   Trash2,
   AlertCircle,
   RefreshCw,
-  Zap,
-  Activity,
   Lock,
+  CheckCircle2,
   Cpu,
-  Server,
   Layers,
-  HelpCircle,
+  Sparkles,
 } from "lucide-react";
 import { keyService, ApiKeyItem, ProviderType } from "@/lib/api/keyService";
 
-const PROVIDERS: { id: ProviderType; name: string; icon: string; placeholder: string; badge: string }[] = [
-  { id: "gemini", name: "Google Gemini", icon: "💎", placeholder: "AIzaSy... or AQ....", badge: "Recommended" },
-  { id: "openai", name: "OpenAI GPT", icon: "⚡", placeholder: "sk-proj-...", badge: "Fast" },
-  { id: "anthropic", name: "Anthropic Claude", icon: "🧠", placeholder: "sk-ant-...", badge: "Reasoning" },
-  { id: "groq", name: "Groq / Llama", icon: "🚀", placeholder: "gsk_...", badge: "Ultra-Fast" },
-  { id: "custom", name: "Custom Provider", icon: "🔑", placeholder: "Enter API key...", badge: "Custom" },
+const PROVIDERS: { id: ProviderType; name: string; icon: string; placeholder: string; badge: string; desc: string }[] = [
+  { id: "gemini", name: "Google Gemini", icon: "💎", placeholder: "AIzaSy... or AQ....", badge: "Recommended", desc: "Gemini 1.5 Flash & Pro models" },
+  { id: "openai", name: "OpenAI GPT", icon: "⚡", placeholder: "sk-proj-...", badge: "Fast", desc: "GPT-4o & GPT-4o-mini models" },
+  { id: "anthropic", name: "Anthropic Claude", icon: "🧠", placeholder: "sk-ant-...", badge: "Reasoning", desc: "Claude 3.5 Sonnet & Haiku models" },
+  { id: "groq", name: "Groq / Llama", icon: "🚀", placeholder: "gsk_...", badge: "Ultra-Fast", desc: "Llama 3.3 70B & 8B fast inference" },
+  { id: "custom", name: "Custom Provider", icon: "🔑", placeholder: "Enter API key...", badge: "Custom", desc: "OpenRouter & custom compatible APIs" },
 ];
 
 export default function SettingsPage() {
-  const [model, setModel] = useState("Gemini 1.5 Flash");
-  const [temp, setTemp] = useState(0.7);
-  const [riskSensitivity, setRiskSensitivity] = useState(65);
-
   const [keysList, setKeysList] = useState<ApiKeyItem[]>([]);
   const [provider, setProvider] = useState<ProviderType>("gemini");
   const [apiKey, setApiKey] = useState("");
@@ -52,17 +41,9 @@ export default function SettingsPage() {
     message: string;
   } | null>(null);
 
-  const [saved, setSaved] = useState(false);
-
   useEffect(() => {
     const keys = keyService.getKeys();
     setKeysList(keys);
-    const storedModel = localStorage.getItem("SWARMLENS_MODEL") || "Gemini 1.5 Flash";
-    const storedTemp = localStorage.getItem("SWARMLENS_TEMP") || "0.7";
-    const storedRisk = localStorage.getItem("SWARMLENS_RISK_SENSITIVITY") || "65";
-    setModel(storedModel);
-    setTemp(parseFloat(storedTemp));
-    setRiskSensitivity(parseInt(storedRisk));
   }, []);
 
   const handleVerify = async () => {
@@ -123,64 +104,47 @@ export default function SettingsPage() {
     setKeysList(updated);
   };
 
-  const handleSaveGeneral = () => {
-    localStorage.setItem("SWARMLENS_MODEL", model);
-    localStorage.setItem("SWARMLENS_TEMP", String(temp));
-    localStorage.setItem("SWARMLENS_RISK_SENSITIVITY", String(riskSensitivity));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-  };
-
   const activeKeysCount = keysList.length;
-  const primaryKey = keysList.find((k) => k.isPrimary) || keysList[0];
 
   return (
-    <AppShell title="SETTINGS" subtitle="ENTERPRISE ENGINE & MULTI-PROVIDER KEY ORCHESTRATION">
+    <AppShell title="SETTINGS" subtitle="MULTI-PROVIDER API KEY MANAGEMENT">
       {() => (
         <div className="space-y-6 max-w-7xl mx-auto pb-16 select-none">
-          {/* Top SaaS Banner Header */}
+          {/* Top Header Banner */}
           <div className="rounded-3xl border border-line bg-surface p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm relative overflow-hidden">
             <div className="absolute -right-16 -top-16 w-64 h-64 bg-accent/5 rounded-full blur-3xl pointer-events-none" />
             <div className="flex items-center gap-4 relative">
               <div className="h-12 w-12 rounded-2xl bg-accent/10 border border-accent/30 flex items-center justify-center text-accent shrink-0">
-                <Settings className="h-6 w-6" />
+                <Key className="h-6 w-6" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-display text-lg font-bold text-ink">Engine & Model Configuration</h3>
+                  <h3 className="font-display text-lg font-bold text-ink">API Key Access & Provider Management</h3>
                   <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/30 font-semibold flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     LIVE ENGINE
                   </span>
                 </div>
                 <p className="text-xs text-muted mt-0.5">
-                  Configure multi-provider API key failover pools, global simulation controls, and agent temperature parameters.
+                  Configure and verify your official API key credentials (Google Gemini, OpenAI, Anthropic Claude, Groq) with zero log retention.
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 border-line pt-4 md:pt-0">
-              <div className="text-right hidden sm:block">
+              <div className="text-right">
                 <div className="text-[10px] font-mono text-muted uppercase">ACTIVE KEY POOL</div>
                 <div className="text-xs font-mono font-bold text-accent">{activeKeysCount} Provider Keys Registered</div>
               </div>
-              <button
-                onClick={handleSaveGeneral}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-accent text-white text-xs font-semibold hover:opacity-90 transition-all shadow-md shadow-accent/20 shrink-0"
-              >
-                {saved ? <CheckCircle2 className="h-4 w-4 text-white" /> : <Save className="h-4 w-4" />}
-                <span>{saved ? "Settings Saved" : "Save Changes"}</span>
-              </button>
             </div>
           </div>
 
-          {/* 2-Column Parallel Grid Layout */}
+          {/* 2-Column Grid Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             
-            {/* LEFT COLUMN: API Keys & Failover Pool (7 Columns) */}
+            {/* LEFT COLUMN: API Keys Pool Manager (7 Columns) */}
             <div className="lg:col-span-7 space-y-6">
               
-              {/* API Key Pool Manager */}
               <div className="rounded-3xl border border-line bg-surface p-6 space-y-5 shadow-sm">
                 <div className="flex items-center justify-between border-b border-line pb-4">
                   <div>
@@ -201,7 +165,7 @@ export default function SettingsPage() {
                   <div className="space-y-3 font-mono">
                     <div className="flex items-center justify-between text-muted text-[10px] font-bold tracking-wider uppercase px-1">
                       <span>KEY POOL PRIORITY ORDER</span>
-                      <span>AUTOMATIC FAILOVER</span>
+                      <span>STATUS</span>
                     </div>
 
                     <div className="space-y-2.5">
@@ -424,137 +388,49 @@ export default function SettingsPage() {
 
             </div>
 
-            {/* RIGHT COLUMN: Agent Defaults & Platform Telemetry (5 Columns) */}
+            {/* RIGHT COLUMN: Supported Providers & Security (5 Columns) */}
             <div className="lg:col-span-5 space-y-6">
 
-              {/* Agent Hyperparameters & Defaults */}
-              <div className="rounded-3xl border border-line bg-surface p-6 space-y-5 shadow-sm">
-                <div className="flex items-center justify-between border-b border-line pb-4">
-                  <h4 className="font-display text-sm font-bold text-ink flex items-center gap-2">
-                    <Sliders className="h-4 w-4 text-accent2" /> Simulation Hyperparameters
-                  </h4>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-accent2/10 text-accent2 border border-accent2/30 font-semibold">
-                    REAL-TIME
-                  </span>
-                </div>
-
-                <div className="space-y-5 font-mono text-xs">
-                  
-                  {/* Preset Selector */}
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] text-muted block font-bold uppercase tracking-wider">PRESET STRATEGY PROFILE</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { label: "Deterministic", t: 0.2, r: 40 },
-                        { label: "Balanced", t: 0.7, r: 65 },
-                        { label: "Creative", t: 0.9, r: 80 },
-                      ].map((preset) => (
-                        <button
-                          key={preset.label}
-                          type="button"
-                          onClick={() => {
-                            setTemp(preset.t);
-                            setRiskSensitivity(preset.r);
-                          }}
-                          className={`py-2 px-2 rounded-xl border text-[11px] font-semibold text-center transition-all ${
-                            temp === preset.t && riskSensitivity === preset.r
-                              ? "bg-accent2/15 border-accent2 text-accent2 shadow-xs"
-                              : "bg-base border-line text-muted hover:text-ink"
-                          }`}
-                        >
-                          {preset.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Temperature Slider */}
-                  <div className="space-y-2 pt-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-ink font-semibold">AGENT TEMPERATURE</span>
-                      <span className="text-accent font-bold text-sm bg-accent/10 px-2 py-0.5 rounded-lg border border-accent/20">
-                        {temp}
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.1"
-                      max="1.0"
-                      step="0.1"
-                      value={temp}
-                      onChange={(e) => setTemp(parseFloat(e.target.value))}
-                      className="w-full accent-accent bg-raised h-1.5 rounded-lg appearance-none cursor-pointer"
-                    />
-                    <div className="flex items-center justify-between text-[10px] text-muted">
-                      <span>Strict Deterministic (0.1)</span>
-                      <span>High Creativity (1.0)</span>
-                    </div>
-                  </div>
-
-                  {/* Risk Sensitivity Slider */}
-                  <div className="space-y-2 pt-3 border-t border-line">
-                    <div className="flex items-center justify-between">
-                      <span className="text-ink font-semibold font-mono">RISK THRESHOLD SENSITIVITY</span>
-                      <span className="text-accent2 font-bold text-sm bg-accent2/10 px-2 py-0.5 rounded-lg border border-accent2/20 font-mono">
-                        {riskSensitivity}%
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="10"
-                      max="90"
-                      step="5"
-                      value={riskSensitivity}
-                      onChange={(e) => setRiskSensitivity(parseInt(e.target.value))}
-                      className="w-full accent-accent2 bg-raised h-1.5 rounded-lg appearance-none cursor-pointer"
-                    />
-                    <p className="text-[10px] text-muted leading-normal">
-                      Global baseline trigger threshold for agent alert state escalations during round execution.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Failover Health & System Telemetry Card */}
+              {/* Supported Providers Reference Card */}
               <div className="rounded-3xl border border-line bg-surface p-6 space-y-4 shadow-sm font-mono">
                 <div className="flex items-center justify-between border-b border-line pb-3">
                   <h4 className="font-display text-sm font-bold text-ink flex items-center gap-2">
-                    <Activity className="h-4 w-4 text-emerald-500" /> Failover & Engine Health
+                    <Layers className="h-4 w-4 text-accent" /> Supported LLM Providers
                   </h4>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/30 font-semibold">
-                    HEALTHY
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/30 font-semibold">
+                    BYOK
                   </span>
                 </div>
 
-                <div className="space-y-3 text-xs">
-                  <div className="p-3 rounded-2xl bg-base border border-line flex items-center justify-between">
-                    <span className="text-muted text-[11px]">PRIMARY PROVIDER</span>
-                    <span className="font-bold text-ink uppercase flex items-center gap-1.5">
-                      <span>{PROVIDERS.find((p) => p.id === primaryKey?.provider)?.icon || "💎"}</span>
-                      <span>{primaryKey?.provider || "Gemini"}</span>
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-2xl bg-base border border-line flex items-center justify-between">
-                    <span className="text-muted text-[11px]">AUTOMATIC FAILOVER</span>
-                    <span className="font-bold text-emerald-600 text-[11px]">ACTIVE (HTTP 429 SHIELD)</span>
-                  </div>
-
-                  <div className="p-3 rounded-2xl bg-base border border-line flex items-center justify-between">
-                    <span className="text-muted text-[11px]">AVG CHAT RESPONSE</span>
-                    <span className="font-bold text-accent text-[11px]">&lt; 350 ms</span>
-                  </div>
+                <div className="space-y-2.5">
+                  {PROVIDERS.filter((p) => p.id !== "custom").map((p) => (
+                    <div
+                      key={p.id}
+                      className="p-3 rounded-2xl bg-base border border-line flex items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">{p.icon}</span>
+                        <div>
+                          <div className="text-xs font-bold text-ink">{p.name}</div>
+                          <div className="text-[10px] text-muted">{p.desc}</div>
+                        </div>
+                      </div>
+                      <span className="text-[9px] px-2 py-0.5 rounded-md bg-raised border border-line text-muted">
+                        {p.placeholder.split("...")[0]}...
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
               {/* Security & Privacy Rules */}
-              <div className="p-4 rounded-3xl bg-base border border-line flex items-start gap-3 text-xs font-mono text-muted leading-relaxed">
-                <Lock className="h-4 w-4 text-accent shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <span className="font-bold text-ink block text-[11px]">ZERO LOG RETENTION & ENCRYPTION</span>
-                  <span className="text-[10px] opacity-80 block">
-                    API keys are stored securely in local browser state and session databases. Keys are never logged in cleartext or shared across tenant environments.
-                  </span>
+              <div className="p-5 rounded-3xl bg-base border border-line flex items-start gap-3.5 text-xs font-mono text-muted leading-relaxed">
+                <Lock className="h-5 w-5 text-accent shrink-0 mt-0.5" />
+                <div className="space-y-1.5">
+                  <span className="font-bold text-ink block text-xs">ZERO LOG RETENTION & SECURE BYOK</span>
+                  <p className="text-[11px] opacity-80 leading-normal">
+                    Your API keys are stored in encrypted client browser storage and used solely to probe and execute agent decisions. Keys are never logged in cleartext or shared across tenant environments.
+                  </p>
                 </div>
               </div>
 
