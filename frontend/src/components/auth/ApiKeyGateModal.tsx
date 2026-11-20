@@ -161,13 +161,13 @@ export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-display text-lg font-bold text-ink">API Key Access & Fallback Manager</h3>
+                <h3 className="font-display text-lg font-bold text-ink">API Key & Provider Access</h3>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent font-semibold">
                   MULTI-PROVIDER
                 </span>
               </div>
               <p className="text-xs text-muted mt-0.5">
-                Configure your API key credentials. You can add fallback keys to automatically bypass quota limits.
+                Configure and manage your API credentials for multi-agent simulation.
               </p>
             </div>
           </div>
@@ -189,9 +189,9 @@ export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
             <div className="space-y-3">
               <div className="flex items-center justify-between text-xs font-mono">
                 <span className="font-bold text-ink flex items-center gap-1.5">
-                  <Zap className="h-3.5 w-3.5 text-accent" /> CONFIGURED KEYS POOL ({keysList.length})
+                  <Zap className="h-3.5 w-3.5 text-accent" /> CONFIGURED KEYS ({keysList.length})
                 </span>
-                <span className="text-[10px] text-muted">PRIMARY AT TOP · AUTOMATIC FALLBACK ON QUOTA LIMITS</span>
+                <span className="text-[10px] text-muted">ACTIVE PROVIDERS</span>
               </div>
 
               <div className="space-y-2">
@@ -281,7 +281,7 @@ export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
               className="w-full py-2.5 rounded-2xl border border-dashed border-line hover:border-accent text-xs font-mono text-muted hover:text-accent flex items-center justify-center gap-2 transition-all bg-base/50"
             >
               <Plus className="h-4 w-4" />
-              <span>Add Fallback API Key (OpenAI, Gemini, Anthropic)</span>
+              <span>Add API Key (OpenAI, Gemini, Anthropic, Groq)</span>
             </button>
           )}
 
@@ -430,33 +430,19 @@ export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
               </div>
             </form>
           )}
-
-          {/* Info Banner on Fallback Technique */}
-          <div className="p-3.5 rounded-2xl bg-base border border-line flex items-start gap-2.5 text-[11px] font-mono text-muted leading-relaxed">
-            <ShieldCheck className="h-4 w-4 text-accent shrink-0 mt-0.5" />
-            <span>
-              <strong>Fallback Technique:</strong> LOKI orchestrates 50 autonomous LLM personas simultaneously.
-              If your primary API key triggers a provider rate limit (HTTP 429), the engine automatically fails over to your configured backup keys without interrupting the simulation.
-            </span>
-          </div>
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-line bg-raised/30 flex items-center justify-between">
-          <div className="text-[11px] font-mono text-muted flex items-center gap-1.5">
-            <Lock className="h-3.5 w-3.5 text-accent" />
-            <span>Keys stored locally in client browser storage</span>
-          </div>
-
-          {hasActiveKey && (
+        {hasActiveKey && (
+          <div className="p-4 border-t border-line bg-raised/30 flex items-center justify-end">
             <button
               onClick={onClose}
               className="px-5 py-2 rounded-xl bg-accent text-white text-xs font-semibold hover:opacity-90 transition-all shadow-md shadow-accent/20"
             >
               Continue to Simulation
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

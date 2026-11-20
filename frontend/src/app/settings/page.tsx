@@ -11,20 +11,17 @@ import {
   Trash2,
   AlertCircle,
   RefreshCw,
-  Lock,
   CheckCircle2,
-  Cpu,
   Layers,
-  Sparkles,
 } from "lucide-react";
 import { keyService, ApiKeyItem, ProviderType } from "@/lib/api/keyService";
 
 const PROVIDERS: { id: ProviderType; name: string; icon: string; placeholder: string; badge: string; desc: string }[] = [
-  { id: "gemini", name: "Google Gemini", icon: "💎", placeholder: "AIzaSy... or AQ....", badge: "Recommended", desc: "Gemini 1.5 Flash & Pro models" },
-  { id: "openai", name: "OpenAI GPT", icon: "⚡", placeholder: "sk-proj-...", badge: "Fast", desc: "GPT-4o & GPT-4o-mini models" },
-  { id: "anthropic", name: "Anthropic Claude", icon: "🧠", placeholder: "sk-ant-...", badge: "Reasoning", desc: "Claude 3.5 Sonnet & Haiku models" },
-  { id: "groq", name: "Groq / Llama", icon: "🚀", placeholder: "gsk_...", badge: "Ultra-Fast", desc: "Llama 3.3 70B & 8B fast inference" },
-  { id: "custom", name: "Custom Provider", icon: "🔑", placeholder: "Enter API key...", badge: "Custom", desc: "OpenRouter & custom compatible APIs" },
+  { id: "gemini", name: "Google Gemini", icon: "💎", placeholder: "AIzaSy... or AQ....", badge: "Gemini 1.5", desc: "Gemini 1.5 Flash & Pro" },
+  { id: "groq", name: "Groq", icon: "🚀", placeholder: "gsk_...", badge: "Llama 3.3", desc: "Ultra-fast inference" },
+  { id: "openai", name: "OpenAI", icon: "⚡", placeholder: "sk-proj-...", badge: "GPT-4o", desc: "GPT-4o & GPT-4o-mini" },
+  { id: "anthropic", name: "Anthropic", icon: "🧠", placeholder: "sk-ant-...", badge: "Claude 3.5", desc: "Sonnet & Haiku models" },
+  { id: "custom", name: "Custom", icon: "🔑", placeholder: "Enter API key...", badge: "Compatible", desc: "OpenRouter / OpenAI-compat" },
 ];
 
 export default function SettingsPage() {
@@ -80,7 +77,7 @@ export default function SettingsPage() {
       setVerificationResult({
         valid: true,
         status: "VERIFIED",
-        message: `${provider.toUpperCase()} API key verified by official provider and saved to pool!`,
+        message: `${provider.toUpperCase()} API key verified and saved successfully.`,
       });
       setTimeout(() => setVerificationResult(null), 3500);
     } catch (err: any) {
@@ -104,338 +101,279 @@ export default function SettingsPage() {
     setKeysList(updated);
   };
 
-  const activeKeysCount = keysList.length;
-
   return (
-    <AppShell title="SETTINGS" subtitle="MULTI-PROVIDER API KEY MANAGEMENT">
+    <AppShell title="SETTINGS" subtitle="API KEY & PROVIDER CONFIGURATION">
       {() => (
-        <div className="space-y-6 max-w-7xl mx-auto pb-16 select-none">
-          {/* Top Header Banner */}
-          <div className="rounded-3xl border border-line bg-surface p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm relative overflow-hidden">
-            <div className="absolute -right-16 -top-16 w-64 h-64 bg-accent/5 rounded-full blur-3xl pointer-events-none" />
-            <div className="flex items-center gap-4 relative">
-              <div className="h-12 w-12 rounded-2xl bg-accent/10 border border-accent/30 flex items-center justify-center text-accent shrink-0">
-                <Key className="h-6 w-6" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-display text-lg font-bold text-ink">API Key Access & Provider Management</h3>
-                  <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/30 font-semibold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    LIVE ENGINE
-                  </span>
-                </div>
-                <p className="text-xs text-muted mt-0.5">
-                  Configure and verify your official API key credentials (Google Gemini, OpenAI, Anthropic Claude, Groq) with zero log retention.
-                </p>
-              </div>
+        <div className="max-w-4xl mx-auto py-6 px-4 sm:px-6 space-y-6 select-none">
+          {/* Page Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-line">
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-ink font-display">Settings</h1>
+              <p className="text-xs text-muted mt-0.5">Manage API keys and model provider credentials</p>
             </div>
-
-            <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 border-line pt-4 md:pt-0">
-              <div className="text-right">
-                <div className="text-[10px] font-mono text-muted uppercase">ACTIVE KEY POOL</div>
-                <div className="text-xs font-mono font-bold text-accent">{activeKeysCount} Provider Keys Registered</div>
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono px-3 py-1 rounded-full bg-raised border border-line text-muted">
+                {keysList.length} {keysList.length === 1 ? "Active Key" : "Active Keys"}
+              </span>
             </div>
           </div>
 
-          {/* 2-Column Grid Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            
-            {/* LEFT COLUMN: API Keys Pool Manager (7 Columns) */}
-            <div className="lg:col-span-7 space-y-6">
-              
-              <div className="rounded-3xl border border-line bg-surface p-6 space-y-5 shadow-sm">
-                <div className="flex items-center justify-between border-b border-line pb-4">
-                  <div>
-                    <h4 className="font-display text-sm font-bold text-ink flex items-center gap-2">
-                      <Key className="h-4 w-4 text-accent" /> API Keys & Multi-Provider Failover Pool
-                    </h4>
-                    <p className="text-[11px] text-muted font-mono mt-0.5">
-                      Automatic zero-downtime failover across providers on HTTP 429 rate limits.
-                    </p>
-                  </div>
-                  <span className="text-[10px] font-mono px-2.5 py-1 rounded-xl bg-raised border border-line text-muted font-semibold">
-                    {activeKeysCount} ACTIVE
-                  </span>
-                </div>
+          {/* Section 1: Configured Keys List */}
+          <div className="rounded-2xl border border-line/70 bg-surface p-6 space-y-4 shadow-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-line/50">
+              <div className="flex items-center gap-2">
+                <Key className="h-4 w-4 text-accent" />
+                <h2 className="text-sm font-semibold text-ink">Configured Keys</h2>
+              </div>
+              {keysList.length > 0 && (
+                <span className="text-[11px] font-mono text-muted">Primary key is used by default</span>
+              )}
+            </div>
 
-                {/* Active Key List */}
-                {keysList.length > 0 ? (
-                  <div className="space-y-3 font-mono">
-                    <div className="flex items-center justify-between text-muted text-[10px] font-bold tracking-wider uppercase px-1">
-                      <span>KEY POOL PRIORITY ORDER</span>
-                      <span>STATUS</span>
-                    </div>
-
-                    <div className="space-y-2.5">
-                      {keysList.map((item, index) => {
-                        const provConfig = PROVIDERS.find((p) => p.id === item.provider);
-                        return (
-                          <div
-                            key={item.id}
-                            className={`p-4 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
-                              item.isPrimary
-                                ? "bg-accent/5 border-accent/40 shadow-xs"
-                                : "bg-base/60 border-line hover:border-line/80"
-                            }`}
-                          >
-                            <div className="flex items-center gap-3.5 min-w-0">
-                              <div className="h-10 w-10 rounded-xl bg-raised border border-line flex items-center justify-center text-lg shrink-0">
-                                {provConfig?.icon || "🔑"}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-bold text-ink truncate">{item.name}</span>
-                                  {item.isPrimary ? (
-                                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-accent text-white font-bold tracking-wide">
-                                      PRIMARY
-                                    </span>
-                                  ) : (
-                                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-raised border border-line text-muted font-medium">
-                                      PRIORITY #{index + 1}
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-[11px] text-muted truncate mt-1 flex items-center gap-2">
-                                  <span className="font-mono">{item.key.substring(0, 8)}...{item.key.substring(item.key.length - 4)}</span>
-                                  <span>•</span>
-                                  <span className="uppercase text-[10px] font-semibold text-accent">{item.provider}</span>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Status & Actions */}
-                            <div className="flex items-center gap-2 shrink-0">
-                              {item.status === "VERIFIED" && (
-                                <span className="text-[10px] px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/30 font-semibold flex items-center gap-1">
-                                  <CheckCircle2 className="h-3 w-3" /> Verified
-                                </span>
-                              )}
-                              {item.status === "EXCEEDED" && (
-                                <span className="text-[10px] px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/30 font-semibold flex items-center gap-1">
-                                  <AlertCircle className="h-3 w-3" /> Quota Exceeded
-                                </span>
-                              )}
-                              {item.status === "INVALID" && (
-                                <span className="text-[10px] px-2.5 py-1 rounded-full bg-red-500/10 text-red-600 border border-red-500/30 font-semibold flex items-center gap-1">
-                                  <AlertCircle className="h-3 w-3" /> Invalid
-                                </span>
-                              )}
-                              {item.status === "UNVERIFIED" && (
-                                <span className="text-[10px] px-2.5 py-1 rounded-full bg-raised text-muted border border-line font-semibold">
-                                  Active
-                                </span>
-                              )}
-
-                              {!item.isPrimary && (
-                                <button
-                                  onClick={() => handleSetPrimary(item.id)}
-                                  className="px-2.5 py-1 rounded-xl bg-raised hover:bg-line border border-line text-[11px] text-muted hover:text-ink transition-all"
-                                >
-                                  Make Primary
-                                </button>
-                              )}
-
-                              <button
-                                onClick={() => handleRemoveKey(item.id)}
-                                className="p-1.5 rounded-xl bg-raised hover:bg-red-500/10 text-muted hover:text-red-500 transition-all border border-line"
-                                title="Remove Key"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-5 rounded-2xl bg-base border border-line text-xs font-mono text-muted text-center space-y-2">
-                    <p className="font-semibold text-ink">No API Keys Configured in Pool</p>
-                    <p className="text-[11px] opacity-80">
-                      Add an API key below to enable multi-turn AI interrogation and dynamic simulation features.
-                    </p>
-                  </div>
-                )}
-
-                {/* Add New Key Form */}
-                <form onSubmit={handleAddKey} className="p-5 rounded-2xl bg-base/70 border border-line space-y-4 font-mono">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-ink uppercase flex items-center gap-1.5">
-                      <Plus className="h-3.5 w-3.5 text-accent" /> ADD NEW API KEY TO POOL
-                    </span>
-                    <span className="text-[10px] text-muted">Auto-Encrypted Storage</span>
-                  </div>
-
-                  {/* Provider Pills */}
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] text-muted block font-bold">SELECT PROVIDER</label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {PROVIDERS.map((p) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => {
-                            setProvider(p.id);
-                            setVerificationResult(null);
-                          }}
-                          className={`p-2.5 rounded-xl border text-xs flex items-center justify-between gap-1.5 transition-all ${
-                            provider === p.id
-                              ? "bg-accent/15 border-accent text-accent font-bold shadow-xs"
-                              : "bg-surface border-line text-muted hover:text-ink"
-                          }`}
-                        >
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span>{p.icon}</span>
-                            <span className="truncate">{p.name}</span>
-                          </div>
-                          <span className="text-[9px] opacity-60 font-mono hidden sm:inline">{p.badge}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Key Secret Input & Label */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] text-muted block font-bold">KEY LABEL (OPTIONAL)</label>
-                      <input
-                        type="text"
-                        value={keyName}
-                        onChange={(e) => setKeyName(e.target.value)}
-                        placeholder="e.g. Primary Production Key"
-                        className="w-full bg-surface border border-line rounded-xl px-3.5 py-2.5 text-xs text-ink focus:outline-none focus:border-accent"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[11px] text-muted block font-bold">API KEY SECRET</label>
-                      <div className="relative flex items-center">
-                        <input
-                          type={showApiKey ? "text" : "password"}
-                          value={apiKey}
-                          onChange={(e) => {
-                            setApiKey(e.target.value);
-                            if (verificationResult) setVerificationResult(null);
-                          }}
-                          placeholder={PROVIDERS.find((p) => p.id === provider)?.placeholder || "Enter API Key"}
-                          className="w-full bg-surface border border-line rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-ink focus:outline-none focus:border-accent"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowApiKey(!showApiKey)}
-                          className="absolute right-3 text-muted hover:text-ink p-1"
-                        >
-                          {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Verification Banner */}
-                  {verificationResult && (
+            {keysList.length > 0 ? (
+              <div className="space-y-2.5">
+                {keysList.map((item, index) => {
+                  const provConfig = PROVIDERS.find((p) => p.id === item.provider);
+                  return (
                     <div
-                      className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
-                        verificationResult.status === "VERIFIED"
-                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600"
-                          : verificationResult.status === "EXCEEDED"
-                          ? "bg-amber-500/10 border-amber-500/30 text-amber-600"
-                          : "bg-red-500/10 border-red-500/30 text-red-500"
+                      key={item.id}
+                      className={`p-3.5 rounded-xl border transition-all flex items-center justify-between gap-3 ${
+                        item.isPrimary
+                          ? "bg-accent/5 border-accent/40 shadow-xs"
+                          : "bg-base border-line hover:border-line/80"
                       }`}
                     >
-                      {verificationResult.status === "VERIFIED" && <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />}
-                      {verificationResult.status === "EXCEEDED" && <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />}
-                      {verificationResult.status === "INVALID" && <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />}
-                      <div>
-                        <div className="font-bold">
-                          {verificationResult.status === "VERIFIED" && "API KEY VERIFIED"}
-                          {verificationResult.status === "EXCEEDED" && "QUOTA / RATE LIMIT EXCEEDED"}
-                          {verificationResult.status === "INVALID" && "INVALID API KEY"}
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="h-9 w-9 rounded-xl bg-raised border border-line flex items-center justify-center text-base shrink-0">
+                          {provConfig?.icon || "🔑"}
                         </div>
-                        <div className="text-[11px] opacity-90 mt-0.5">{verificationResult.message}</div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-ink truncate">{item.name}</span>
+                            {item.isPrimary ? (
+                              <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-accent text-white font-bold">
+                                PRIMARY
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-raised border border-line text-muted">
+                                #{index + 1}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-muted truncate mt-0.5 flex items-center gap-2 font-mono">
+                            <span>{item.key.substring(0, 8)}...{item.key.substring(item.key.length - 4)}</span>
+                            <span>•</span>
+                            <span className="uppercase text-[10px] font-semibold text-accent">{item.provider}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Status & Actions */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {item.status === "VERIFIED" && (
+                          <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/30 font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> Verified
+                          </span>
+                        )}
+                        {item.status === "EXCEEDED" && (
+                          <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/30 font-semibold flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" /> Quota Exceeded
+                          </span>
+                        )}
+                        {item.status === "INVALID" && (
+                          <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-red-500/10 text-red-600 border border-red-500/30 font-semibold flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" /> Invalid
+                          </span>
+                        )}
+                        {item.status === "UNVERIFIED" && (
+                          <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-raised text-muted border border-line font-semibold">
+                            Active
+                          </span>
+                        )}
+
+                        {!item.isPrimary && (
+                          <button
+                            onClick={() => handleSetPrimary(item.id)}
+                            className="px-2.5 py-1 rounded-lg bg-raised hover:bg-line border border-line text-[11px] font-mono text-muted hover:text-ink transition-all"
+                          >
+                            Make Primary
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => handleRemoveKey(item.id)}
+                          className="p-1.5 rounded-lg bg-raised hover:bg-red-500/10 text-muted hover:text-red-500 transition-all border border-line"
+                          title="Remove Key"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </div>
-                  )}
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-8 rounded-xl border border-dashed border-line text-center space-y-1 bg-base/40">
+                <p className="text-xs font-semibold text-ink">No API keys configured</p>
+                <p className="text-[11px] text-muted">Add a key below to run simulations.</p>
+              </div>
+            )}
+          </div>
 
-                  {/* Submit Actions */}
-                  <div className="flex items-center justify-end gap-2 pt-1">
+          {/* Section 2: Add New API Key */}
+          <div className="rounded-2xl border border-line/70 bg-surface p-6 space-y-5 shadow-xs">
+            <div className="border-b border-line/50 pb-3">
+              <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
+                <Plus className="h-4 w-4 text-accent" /> Add API Key
+              </h2>
+              <p className="text-[11px] text-muted mt-0.5">Enter your official provider API credentials</p>
+            </div>
+
+            <form onSubmit={handleAddKey} className="space-y-4">
+              {/* Provider Selector */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-mono font-medium text-muted block uppercase tracking-wider">
+                  Provider
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  {PROVIDERS.map((p) => {
+                    const isSelected = provider === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          setProvider(p.id);
+                          setVerificationResult(null);
+                        }}
+                        className={`p-2.5 rounded-xl border text-left transition-all ${
+                          isSelected
+                            ? "bg-accent/10 border-accent text-ink font-semibold shadow-2xs"
+                            : "bg-base border-line text-muted hover:text-ink hover:border-line/80"
+                        }`}
+                      >
+                        <div className="text-base">{p.icon}</div>
+                        <div className="text-xs font-medium mt-1 truncate">{p.name}</div>
+                        <div className="text-[10px] text-muted font-mono">{p.badge}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Input Fields: Label & Secret */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-mono font-medium text-muted block uppercase tracking-wider">
+                    Key Label (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={keyName}
+                    onChange={(e) => setKeyName(e.target.value)}
+                    placeholder="e.g. Production Key"
+                    className="w-full bg-base border border-line rounded-xl px-3.5 py-2 text-xs text-ink font-mono placeholder:text-muted/60 focus:outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-mono font-medium text-muted block uppercase tracking-wider">
+                    API Key Secret
+                  </label>
+                  <div className="relative flex items-center">
+                    <input
+                      type={showApiKey ? "text" : "password"}
+                      value={apiKey}
+                      onChange={(e) => {
+                        setApiKey(e.target.value);
+                        if (verificationResult) setVerificationResult(null);
+                      }}
+                      placeholder={PROVIDERS.find((p) => p.id === provider)?.placeholder || "Enter API Key"}
+                      className="w-full bg-base border border-line rounded-xl pl-3.5 pr-10 py-2 text-xs text-ink font-mono placeholder:text-muted/60 focus:outline-none focus:border-accent"
+                    />
                     <button
                       type="button"
-                      onClick={handleVerify}
-                      disabled={isVerifying || !apiKey.trim()}
-                      className="px-4 py-2 rounded-xl border border-line bg-raised hover:bg-line text-xs font-semibold text-ink disabled:opacity-50 flex items-center gap-1.5 transition-all"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="absolute right-3 text-muted hover:text-ink p-1"
                     >
-                      {isVerifying ? (
-                        <RefreshCw className="h-3.5 w-3.5 animate-spin text-accent" />
-                      ) : (
-                        <ShieldCheck className="h-3.5 w-3.5 text-accent" />
-                      )}
-                      <span>Verify Key</span>
-                    </button>
-
-                    <button
-                      type="submit"
-                      disabled={isVerifying || !apiKey.trim()}
-                      className="px-5 py-2 rounded-xl bg-accent text-white text-xs font-semibold hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5 transition-all shadow-md shadow-accent/20"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      <span>Add to Pool</span>
+                      {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
-                </form>
+                </div>
               </div>
 
-            </div>
-
-            {/* RIGHT COLUMN: Supported Providers & Security (5 Columns) */}
-            <div className="lg:col-span-5 space-y-6">
-
-              {/* Supported Providers Reference Card */}
-              <div className="rounded-3xl border border-line bg-surface p-6 space-y-4 shadow-sm font-mono">
-                <div className="flex items-center justify-between border-b border-line pb-3">
-                  <h4 className="font-display text-sm font-bold text-ink flex items-center gap-2">
-                    <Layers className="h-4 w-4 text-accent" /> Supported LLM Providers
-                  </h4>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/30 font-semibold">
-                    BYOK
-                  </span>
-                </div>
-
-                <div className="space-y-2.5">
-                  {PROVIDERS.filter((p) => p.id !== "custom").map((p) => (
-                    <div
-                      key={p.id}
-                      className="p-3 rounded-2xl bg-base border border-line flex items-center justify-between gap-3"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-xl">{p.icon}</span>
-                        <div>
-                          <div className="text-xs font-bold text-ink">{p.name}</div>
-                          <div className="text-[10px] text-muted">{p.desc}</div>
-                        </div>
-                      </div>
-                      <span className="text-[9px] px-2 py-0.5 rounded-md bg-raised border border-line text-muted">
-                        {p.placeholder.split("...")[0]}...
-                      </span>
+              {/* Verification Alert Banner */}
+              {verificationResult && (
+                <div
+                  className={`p-3 rounded-xl border text-xs font-mono flex items-start gap-2.5 ${
+                    verificationResult.status === "VERIFIED"
+                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600"
+                      : verificationResult.status === "EXCEEDED"
+                      ? "bg-amber-500/10 border-amber-500/30 text-amber-600"
+                      : "bg-red-500/10 border-red-500/30 text-red-500"
+                  }`}
+                >
+                  {verificationResult.status === "VERIFIED" && <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-500" />}
+                  {verificationResult.status === "EXCEEDED" && <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />}
+                  {verificationResult.status === "INVALID" && <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-500" />}
+                  <div>
+                    <div className="font-bold">
+                      {verificationResult.status === "VERIFIED" && "Verification Successful"}
+                      {verificationResult.status === "EXCEEDED" && "Quota / Rate Limit Exceeded"}
+                      {verificationResult.status === "INVALID" && "Verification Failed"}
                     </div>
-                  ))}
+                    <div className="text-[11px] opacity-90 mt-0.5">{verificationResult.message}</div>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Security & Privacy Rules */}
-              <div className="p-5 rounded-3xl bg-base border border-line flex items-start gap-3.5 text-xs font-mono text-muted leading-relaxed">
-                <Lock className="h-5 w-5 text-accent shrink-0 mt-0.5" />
-                <div className="space-y-1.5">
-                  <span className="font-bold text-ink block text-xs">ZERO LOG RETENTION & SECURE BYOK</span>
-                  <p className="text-[11px] opacity-80 leading-normal">
-                    Your API keys are stored in encrypted client browser storage and used solely to probe and execute agent decisions. Keys are never logged in cleartext or shared across tenant environments.
-                  </p>
-                </div>
-              </div>
+              {/* Form Actions */}
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={handleVerify}
+                  disabled={isVerifying || !apiKey.trim()}
+                  className="px-4 py-2 rounded-xl border border-line bg-raised hover:bg-line text-xs font-medium text-ink disabled:opacity-50 flex items-center gap-1.5 transition-all"
+                >
+                  {isVerifying ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin text-accent" />
+                  ) : (
+                    <ShieldCheck className="h-3.5 w-3.5 text-accent" />
+                  )}
+                  <span>Verify Key</span>
+                </button>
 
+                <button
+                  type="submit"
+                  disabled={isVerifying || !apiKey.trim()}
+                  className="px-5 py-2 rounded-xl bg-accent text-white text-xs font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5 transition-all shadow-xs"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Save Key</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Section 3: Supported Providers Reference */}
+          <div className="rounded-2xl border border-line/70 bg-surface p-6 space-y-4 shadow-xs">
+            <div className="border-b border-line/50 pb-3">
+              <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
+                <Layers className="h-4 w-4 text-accent" /> Supported Providers
+              </h2>
+              <p className="text-[11px] text-muted mt-0.5">Compatible with standard LLM inference APIs</p>
             </div>
-
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+              {PROVIDERS.filter((p) => p.id !== "custom").map((p) => (
+                <div key={p.id} className="p-3.5 rounded-xl bg-base border border-line/60 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{p.icon}</span>
+                    <span className="text-xs font-semibold text-ink">{p.name}</span>
+                  </div>
+                  <p className="text-[11px] text-muted">{p.desc}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
