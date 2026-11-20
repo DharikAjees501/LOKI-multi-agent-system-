@@ -84,6 +84,14 @@ async def verify_key_config_alias(request: Request):
     req = ConfigVerifyRequest(**body)
     return await verify_keys_config_route(req)
 
+@app.on_event("startup")
+async def startup_event():
+    try:
+        from app.storage.database import ensure_db_initialized
+        loop = asyncio.get_event_loop()
+        loop.run_in_executor(None, ensure_db_initialized)
+    except Exception as e:
+        logger.warning(f"Startup background init notice: {e}")
 
 @app.get("/")
 async def root():

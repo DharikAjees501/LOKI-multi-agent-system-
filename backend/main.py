@@ -10,3 +10,4 @@ from app.main import app
 
 # Export app instance for Vercel ASGI runtime (main:app)
 app = app
+

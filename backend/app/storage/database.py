@@ -18,6 +18,20 @@ from app.core.logging import logger
 
 IS_POSTGRES = settings.DATABASE_URL.startswith("postgresql://") or settings.DATABASE_URL.startswith("postgres://")
 
+def get_clean_database_url() -> str:
+    url = (settings.DATABASE_URL or "").strip()
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    # Automatically add sslmode=require for Render, Neon, or remote postgres
+    if ("render.com" in url or "neon.tech" in url or "aws" in url or "dpg-" in url) and "sslmode=" not in url:
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}sslmode=require"
+    # Enforce connect_timeout so queries never block or hang for 300s
+    if "connect_timeout=" not in url:
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}connect_timeout=8"
+    return url
+
 if IS_POSTGRES and psycopg2:
     class AutoParamRealDictCursor(psycopg2.extras.RealDictCursor):
         def _adapt_query(self, query: str) -> str:
@@ -127,14 +141,15 @@ def get_pg_pool():
     global _pg_pool
     if _pg_pool is None and IS_POSTGRES and psycopg2:
         try:
-            # Scaled connection pool: minconn=2, maxconn=15 to prevent PostgreSQL exhaustion
+            clean_url = get_clean_database_url()
+            # Scaled connection pool: minconn=1, maxconn=10 for serverless & cloud reliability
             _pg_pool = psycopg2.pool.ThreadedConnectionPool(
-                minconn=2,
-                maxconn=15,
-                dsn=settings.DATABASE_URL,
+                minconn=1,
+                maxconn=10,
+                dsn=clean_url,
                 cursor_factory=AutoParamRealDictCursor
             )
-            logger.info("[PostgreSQL Pool] Connection pool initialized (minconn=2, maxconn=15).")
+            logger.info("[PostgreSQL Pool] Connection pool initialized (minconn=1, maxconn=10).")
         except Exception as pool_err:
             logger.warning(f"[PostgreSQL Pool Init Warning]: {pool_err}")
             _pg_pool = None
@@ -147,7 +162,7 @@ def get_db_connection():
             if pool:
                 import time
                 start_wait = time.time()
-                timeout = 10.0  # pool_timeout = 10s before fallback
+                timeout = 6.0  # pool_timeout = 6s before fallback
                 raw_conn = None
 
                 while time.time() - start_wait < timeout:
@@ -203,10 +218,12 @@ def get_db_connection():
                     return PGConnectionWrapper(raw_conn, pool=pool)
                 else:
                     logger.warning("[PostgreSQL Pool]: Pool checkout saturated. Creating fallback direct connection.")
-                    fallback_conn = psycopg2.connect(settings.DATABASE_URL, cursor_factory=AutoParamRealDictCursor)
+                    clean_url = get_clean_database_url()
+                    fallback_conn = psycopg2.connect(clean_url, cursor_factory=AutoParamRealDictCursor, connect_timeout=8)
                     return PGConnectionWrapper(fallback_conn, pool=None)
             else:
-                raw_conn = psycopg2.connect(settings.DATABASE_URL, cursor_factory=AutoParamRealDictCursor)
+                clean_url = get_clean_database_url()
+                raw_conn = psycopg2.connect(clean_url, cursor_factory=AutoParamRealDictCursor, connect_timeout=8)
                 return PGConnectionWrapper(raw_conn)
         except Exception as err:
             logger.error(f"[PostgreSQL Connection Error]: {err}")
@@ -579,5 +596,14 @@ def init_db():
     conn.close()
     logger.info(f"Database schema initialized successfully (Engine: {'PostgreSQL' if is_pg else 'SQLite'}).")
 
-# Run init_db on import
-init_db()
+_db_initialized = False
+
+def ensure_db_initialized():
+    global _db_initialized
+    if _db_initialized:
+        return
+    try:
+        init_db()
+        _db_initialized = True
+    except Exception as e:
+        logger.warning(f"[Database Init Notice]: Deferred schema initialization: {e}")
