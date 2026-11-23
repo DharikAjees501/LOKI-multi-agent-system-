@@ -1,9 +1,11 @@
 import { ExecutiveReport } from "@/types";
 import { API_BASE_URL } from "./baseUrl";
+import { authService } from "./authService";
+import { keyService } from "./keyService";
 
 const MOCK_MODE = process.env.NEXT_PUBLIC_MOCK_MODE === "true";
 
-const DEFAULT_EXECUTIVE_REPORT: ExecutiveReport = {
+export const DEFAULT_EXECUTIVE_REPORT: ExecutiveReport = {
   id: "rep-01",
   title: "EXECUTIVE SYNTHESIS REPORT",
   generatedAt: new Date().toISOString(),
@@ -32,11 +34,24 @@ const DEFAULT_EXECUTIVE_REPORT: ExecutiveReport = {
 };
 
 class ReportApiService {
-  private getGroundedActiveContext() {
+  private getHeaders(): Record<string, string> {
+    return {
+      ...authService.getAuthHeaders(),
+      ...keyService.getBYOKHeaders(),
+    };
+  }
+
+  private getGroundedActiveContext(): { docName: string; title: string; desc: string } | null {
     if (typeof window !== "undefined") {
-      const doc = localStorage.getItem("LOKI_ACTIVE_DOC_NAME") || localStorage.getItem("SWARMLENS_ACTIVE_DOC_NAME");
-      const title = localStorage.getItem("LOKI_ACTIVE_SCENARIO_NAME") || localStorage.getItem("SWARMLENS_ACTIVE_SCENARIO_NAME");
-      const desc = localStorage.getItem("LOKI_ACTIVE_SCENARIO_DESC") || localStorage.getItem("SWARMLENS_ACTIVE_SCENARIO_DESC");
+      const doc =
+        localStorage.getItem("SWARMLENS_ACTIVE_DOC_NAME") ||
+        localStorage.getItem("LOKI_ACTIVE_DOC_NAME");
+      const title =
+        localStorage.getItem("SWARMLENS_ACTIVE_SCENARIO_NAME") ||
+        localStorage.getItem("LOKI_ACTIVE_SCENARIO_NAME");
+      const desc =
+        localStorage.getItem("SWARMLENS_ACTIVE_SCENARIO_DESC") ||
+        localStorage.getItem("LOKI_ACTIVE_SCENARIO_DESC");
       if (doc && doc !== "No document loaded") {
         return {
           docName: doc,
@@ -48,11 +63,27 @@ class ReportApiService {
     return null;
   }
 
-  async getExecutiveReport(scenarioId: string = "scen-01", roundNum?: number): Promise<ExecutiveReport> {
-    if (!MOCK_MODE) {
+  private resolveScenarioId(scenarioId?: string): string {
+    const id =
+      scenarioId ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("active_scenario_id") ||
+          localStorage.getItem("SWARMLENS_ACTIVE_SCENARIO_ID") ||
+          localStorage.getItem("LOKI_ACTIVE_SCENARIO_ID") ||
+          ""
+        : "");
+    return id === "scen-01" ? "" : id;
+  }
+
+  async getExecutiveReport(scenarioId?: string, roundNum?: number): Promise<ExecutiveReport> {
+    const targetId = this.resolveScenarioId(scenarioId);
+    if (!MOCK_MODE && targetId) {
       try {
-        const url = roundNum ? `${API_BASE_URL}/scenarios/${scenarioId}/report?round=${roundNum}` : `${API_BASE_URL}/scenarios/${scenarioId}/report`;
-        const res = await fetch(url);
+        const url = roundNum ? `${API_BASE_URL}/scenarios/${targetId}/report?round=${roundNum}` : `${API_BASE_URL}/scenarios/${targetId}/report`;
+        const res = await fetch(url, {
+          credentials: "include",
+          headers: this.getHeaders(),
+        });
         if (res.ok) {
           return await res.json();
         }
@@ -75,11 +106,15 @@ class ReportApiService {
     return DEFAULT_EXECUTIVE_REPORT;
   }
 
-  async getRisks(scenarioId: string = "scen-01", round?: number): Promise<any> {
-    if (!MOCK_MODE) {
+  async getRisks(scenarioId?: string, round?: number): Promise<any> {
+    const targetId = this.resolveScenarioId(scenarioId);
+    if (!MOCK_MODE && targetId) {
       try {
-        const url = round ? `${API_BASE_URL}/scenarios/${scenarioId}/risks?round=${round}` : `${API_BASE_URL}/scenarios/${scenarioId}/risks`;
-        const res = await fetch(url);
+        const url = round ? `${API_BASE_URL}/scenarios/${targetId}/risks?round=${round}` : `${API_BASE_URL}/scenarios/${targetId}/risks`;
+        const res = await fetch(url, {
+          credentials: "include",
+          headers: this.getHeaders(),
+        });
         if (res.ok) {
           return await res.json();
         }
@@ -133,10 +168,14 @@ class ReportApiService {
     };
   }
 
-  async getSentimentTimeSeries(scenarioId: string = "scen-01"): Promise<any> {
-    if (!MOCK_MODE) {
+  async getSentimentTimeSeries(scenarioId?: string): Promise<any> {
+    const targetId = this.resolveScenarioId(scenarioId);
+    if (!MOCK_MODE && targetId) {
       try {
-        const res = await fetch(`${API_BASE_URL}/scenarios/${scenarioId}/sentiment`);
+        const res = await fetch(`${API_BASE_URL}/scenarios/${targetId}/sentiment`, {
+          credentials: "include",
+          headers: this.getHeaders(),
+        });
         if (res.ok) {
           return await res.json();
         }
@@ -155,11 +194,15 @@ class ReportApiService {
     };
   }
 
-  async getConsensusMatrix(scenarioId: string = "scen-01", round?: number): Promise<any> {
-    if (!MOCK_MODE) {
+  async getConsensusMatrix(scenarioId?: string, round?: number): Promise<any> {
+    const targetId = this.resolveScenarioId(scenarioId);
+    if (!MOCK_MODE && targetId) {
       try {
-        const url = round ? `${API_BASE_URL}/scenarios/${scenarioId}/consensus?round=${round}` : `${API_BASE_URL}/scenarios/${scenarioId}/consensus`;
-        const res = await fetch(url);
+        const url = round ? `${API_BASE_URL}/scenarios/${targetId}/consensus?round=${round}` : `${API_BASE_URL}/scenarios/${targetId}/consensus`;
+        const res = await fetch(url, {
+          credentials: "include",
+          headers: this.getHeaders(),
+        });
         if (res.ok) {
           return await res.json();
         }
@@ -176,10 +219,14 @@ class ReportApiService {
     };
   }
 
-  async getTurningPoints(scenarioId: string = "scen-01"): Promise<any> {
-    if (!MOCK_MODE) {
+  async getTurningPoints(scenarioId?: string): Promise<any> {
+    const targetId = this.resolveScenarioId(scenarioId);
+    if (!MOCK_MODE && targetId) {
       try {
-        const res = await fetch(`${API_BASE_URL}/scenarios/${scenarioId}/turning-points`);
+        const res = await fetch(`${API_BASE_URL}/scenarios/${targetId}/turning-points`, {
+          credentials: "include",
+          headers: this.getHeaders(),
+        });
         if (res.ok) {
           return await res.json();
         }
@@ -193,13 +240,20 @@ class ReportApiService {
     ];
   }
 
-  async exportReport(scenarioId: string = "scen-01", format: "pdf" | "json" = "pdf"): Promise<void> {
-    alert(`Exporting Executive Report for ${scenarioId} as ${format.toUpperCase()}...`);
+  async exportReport(scenarioId?: string, format: "pdf" | "json" = "pdf"): Promise<void> {
+    const targetId = this.resolveScenarioId(scenarioId);
+    if (!targetId) return;
+    alert(`Exporting Executive Report for ${targetId} as ${format.toUpperCase()}...`);
   }
 
-  async getRaciMatrix(scenarioId: string = "scen-01"): Promise<any> {
+  async getRaciMatrix(scenarioId?: string): Promise<any> {
+    const targetId = this.resolveScenarioId(scenarioId);
+    if (!targetId) return null;
     try {
-      const res = await fetch(`${API_BASE_URL}/scenarios/${scenarioId}/raci`);
+      const res = await fetch(`${API_BASE_URL}/scenarios/${targetId}/raci`, {
+        credentials: "include",
+        headers: this.getHeaders(),
+      });
       if (res.ok) return await res.json();
     } catch {}
     return {
@@ -241,9 +295,14 @@ class ReportApiService {
     };
   }
 
-  async getRiskThresholdMonitor(scenarioId: string = "scen-01", threshold: number = 35): Promise<any> {
+  async getRiskThresholdMonitor(scenarioId?: string, threshold: number = 35): Promise<any> {
+    const targetId = this.resolveScenarioId(scenarioId);
+    if (!targetId) return null;
     try {
-      const res = await fetch(`${API_BASE_URL}/scenarios/${scenarioId}/risk-threshold-monitor?threshold=${threshold}`);
+      const res = await fetch(`${API_BASE_URL}/scenarios/${targetId}/risk-threshold-monitor?threshold=${threshold}`, {
+        credentials: "include",
+        headers: this.getHeaders(),
+      });
       if (res.ok) return await res.json();
     } catch {}
     return {
@@ -263,9 +322,14 @@ class ReportApiService {
     };
   }
 
-  async getSlideDeck(scenarioId: string = "scen-01"): Promise<any[]> {
+  async getSlideDeck(scenarioId?: string): Promise<any[]> {
+    const targetId = this.resolveScenarioId(scenarioId);
+    if (!targetId) return [];
     try {
-      const res = await fetch(`${API_BASE_URL}/scenarios/${scenarioId}/slides`);
+      const res = await fetch(`${API_BASE_URL}/scenarios/${targetId}/slides`, {
+        credentials: "include",
+        headers: this.getHeaders(),
+      });
       if (res.ok) return await res.json();
     } catch {}
     return [
@@ -277,9 +341,14 @@ class ReportApiService {
     ];
   }
 
-  async getAudioBriefing(scenarioId: string = "scen-01"): Promise<any> {
+  async getAudioBriefing(scenarioId?: string): Promise<any> {
+    const targetId = this.resolveScenarioId(scenarioId);
+    if (!targetId) return null;
     try {
-      const res = await fetch(`${API_BASE_URL}/scenarios/${scenarioId}/audio-briefing`);
+      const res = await fetch(`${API_BASE_URL}/scenarios/${targetId}/audio-briefing`, {
+        credentials: "include",
+        headers: this.getHeaders(),
+      });
       if (res.ok) return await res.json();
     } catch {}
     return {
@@ -289,17 +358,15 @@ class ReportApiService {
       audio_url: `/api/scenarios/${scenarioId}/audio-briefing`
     };
   }
+
   async getReportSummary(scenarioId?: string): Promise<any> {
-    const activeId =
-      scenarioId ||
-      (typeof window !== "undefined"
-        ? localStorage.getItem("active_scenario_id") ||
-          localStorage.getItem("SWARMLENS_ACTIVE_SCENARIO_ID") ||
-          localStorage.getItem("LOKI_ACTIVE_SCENARIO_ID") ||
-          "scen-01"
-        : "scen-01");
+    const activeId = this.resolveScenarioId(scenarioId);
+    if (!activeId) return null;
     try {
-      const res = await fetch(`${API_BASE_URL}/reports/summary?scenario_id=${activeId}`);
+      const res = await fetch(`${API_BASE_URL}/reports/summary?scenario_id=${activeId}`, {
+        credentials: "include",
+        headers: this.getHeaders(),
+      });
       if (res.ok) {
         return await res.json();
       }
@@ -310,21 +377,29 @@ class ReportApiService {
   }
 
   async chatWithReportAgent(
-    scenarioId: string = "scen-01",
-    message: string,
+    scenarioId?: string,
+    message: string = "",
     history: Array<{ role: "user" | "assistant"; content: string }> = []
   ): Promise<{ reply: string; citations: string[] }> {
+    const targetId = this.resolveScenarioId(scenarioId);
+    if (!targetId) {
+      return { reply: "No active simulation scenario loaded.", citations: [] };
+    }
     const endpoints = [
-      `/api/reports/${scenarioId}/chat`,
-      `http://127.0.0.1:8000/api/reports/${scenarioId}/chat`,
-      `http://localhost:8000/api/reports/${scenarioId}/chat`,
+      `/api/reports/${targetId}/chat`,
+      `http://127.0.0.1:8000/api/reports/${targetId}/chat`,
+      `http://localhost:8000/api/reports/${targetId}/chat`,
     ];
 
     for (const endpoint of endpoints) {
       try {
         const res = await fetch(endpoint, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...this.getHeaders(),
+          },
           body: JSON.stringify({ message, history }),
         });
         if (res.ok) {
@@ -341,5 +416,3 @@ class ReportApiService {
 }
 
 export const reportApi = new ReportApiService();
-
-

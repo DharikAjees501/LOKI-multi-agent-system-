@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     LANGFUSE_HOST: str = "https://us.cloud.langfuse.com"
     LANGFUSE_BASE_URL: str = "https://us.cloud.langfuse.com"
 
+    # Google OAuth & Authentication (Loaded strictly from .env)
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")
+
     # Production Hardening Guardrails
     MAX_UPLOAD_SIZE_BYTES: int = 15 * 1024 * 1024  # 15 MB
     ALLOWED_EXTENSIONS: List[str] = [".pdf", ".docx", ".txt"]

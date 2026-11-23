@@ -176,8 +176,10 @@ def generate_dynamic_persona_response(
 
 @router.get("/agents", response_model=List[AgentModel])
 @router.get("/scenarios/{id}/agents", response_model=List[AgentModel])
-async def get_scenario_agents(id: str = "scen-01", scenario_id: Optional[str] = None):
+async def get_scenario_agents(id: Optional[str] = None, scenario_id: Optional[str] = None):
     scen_id = scenario_id or id
+    if not scen_id or scen_id == "scen-01":
+        return []
     return persona_service.get_agents_for_scenario(scen_id)
 
 @router.post("/agents/{agent_id}/chat")

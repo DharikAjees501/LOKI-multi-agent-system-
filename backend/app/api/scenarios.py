@@ -2,37 +2,59 @@ import os
 import uuid
 import datetime
 import asyncio
-from fastapi import APIRouter, HTTPException, Query
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, HTTPException, Query, Header, Request, Depends
 from pydantic import BaseModel
-from typing import List, Optional
+
 from app.models.scenario import ScenarioModel, ScenarioCreate
 from app.models.graph import ScenarioGraphResponse
 from app.services.graph_service import graph_service
 from app.engine.orchestrator import orchestrator
 from app.services.persona_service import persona_service
+from app.engine.oasis_engine import oasis_engine
 from app.storage.database import get_db_connection
 from app.core.config import settings
 from app.core.logging import logger
+from app.core.security import get_optional_current_user, get_current_user, verify_scenario_access
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
 
 @router.post("", response_model=ScenarioModel)
-async def create_scenario(payload: ScenarioCreate):
+async def create_scenario(
+    payload: ScenarioCreate,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
     logger.info(f"[Scenarios API] Creating new scenario: '{payload.name}'")
     scen_id = f"scen-{uuid.uuid4().hex[:6]}"
     created_date = datetime.datetime.now().strftime("%Y-%m-%d")
+
+    user_id = current_user.get("id") if current_user else payload.user_id
 
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute(
-            """INSERT INTO scenarios (id, name, description, document_id, created_date, last_simulation, status, agent_count, overall_risk_score)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (scen_id, payload.name, payload.description, payload.document_id or "", created_date, "Never", "READY", 50, 50)
+            """INSERT INTO scenarios (id, name, description, document_id, created_date, last_simulation, status, agent_count, overall_risk_score, user_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (scen_id, payload.name, payload.description, payload.document_id or "", created_date, "Never", "READY", 50, 50, user_id)
         )
-        conn.commit()   
+        conn.commit()
     finally:
         conn.close()
+
+    return ScenarioModel(
+        id=scen_id,
+        name=payload.name,
+        description=payload.description,
+        document_id=payload.document_id or "",
+        documentName=payload.document_id or "No document loaded",
+        createdDate=created_date,
+        lastSimulation="Never",
+        status="READY",
+        agentCount=50,
+        overallRiskScore=50,
+        user_id=user_id
+    )
 
 class CreateAndRunScenarioRequest(BaseModel):
     name: str
@@ -41,21 +63,25 @@ class CreateAndRunScenarioRequest(BaseModel):
     is_what_if: Optional[bool] = False
 
 @router.post("/create-and-run")
-async def create_and_run_scenario(payload: CreateAndRunScenarioRequest):
+async def create_and_run_scenario(
+    payload: CreateAndRunScenarioRequest,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
     logger.info(f"[Scenarios API] Creating and running isolated scenario: '{payload.name}'")
     scen_id = f"scen-{uuid.uuid4().hex[:6]}"
     created_date = datetime.datetime.now().strftime("%Y-%m-%d")
     title = payload.name.strip() or "Strategic Scenario"
     desc = payload.description or "Evaluate strategic risk and stakeholder alignment"
     doc_id = payload.document_id or "doc-default"
+    user_id = current_user.get("id") if current_user else None
 
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute(
-            """INSERT INTO scenarios (id, name, description, document_id, created_date, last_simulation, status, agent_count, overall_risk_score)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (scen_id, title, desc, doc_id, created_date, "Never", "GENERATING_GRAPH", 200, 50)
+            """INSERT INTO scenarios (id, name, description, document_id, created_date, last_simulation, status, agent_count, overall_risk_score, user_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (scen_id, title, desc, doc_id, created_date, "Never", "GENERATING_GRAPH", 200, 50, user_id)
         )
         conn.commit()
     finally:
@@ -72,7 +98,6 @@ async def create_and_run_scenario(payload: CreateAndRunScenarioRequest):
             )
             # 2. Spawn personas & run 5-round OASIS simulation
             agents = persona_service.generate_personas_for_scenario(scen_id, total_agents=200)
-            from app.engine.oasis_engine import oasis_engine
             await oasis_engine.run_full_simulation(
                 scenario_id=scen_id,
                 agents=agents,
@@ -100,11 +125,18 @@ async def create_and_run_scenario(payload: CreateAndRunScenarioRequest):
     }
 
 @router.get("", response_model=List[ScenarioModel])
-async def list_scenarios():
+async def list_scenarios(
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
+    user_id = current_user.get("id") if current_user else None
+
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM scenarios ORDER BY created_date DESC")
+        if user_id:
+            cursor.execute("SELECT * FROM scenarios WHERE user_id = ? ORDER BY created_date DESC", (user_id,))
+        else:
+            cursor.execute("SELECT * FROM scenarios WHERE user_id IS NULL OR user_id = '' ORDER BY created_date DESC")
         rows = cursor.fetchall()
     finally:
         conn.close()
@@ -130,38 +162,68 @@ async def list_scenarios():
     return res
 
 @router.get("/{id}", response_model=ScenarioModel)
-async def get_scenario(id: str):
-    scens = await list_scenarios()
-    target = next((s for s in scens if s.id == id), None)
-    if not target:
-        raise HTTPException(status_code=404, detail="Scenario not found")
-    return target
+async def get_scenario(
+    id: str,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
+    user_id = current_user.get("id") if current_user else None
+    scen_dict = verify_scenario_access(id, user_id)
+
+    return ScenarioModel(
+        id=scen_dict["id"],
+        name=scen_dict["name"],
+        description=scen_dict["description"] or "",
+        documentName=scen_dict["document_id"] or "No document loaded",
+        createdDate=scen_dict["created_date"] or datetime.datetime.now().strftime("%Y-%m-%d"),
+        lastSimulation=scen_dict.get("last_simulation") or "Never",
+        status=scen_dict.get("status") or "READY",
+        agentCount=scen_dict.get("agent_count") or 50,
+        overallRiskScore=scen_dict.get("overall_risk_score") or 50
+    )
 
 @router.get("/{id}/graph", response_model=ScenarioGraphResponse)
-async def get_scenario_graph_endpoint(id: str, round: Optional[int] = Query(None)):
-    """
-    Neo4j Bloom Hub-and-Spoke Topology endpoint:
-    Guarantees every tier (T0_SYSTEM, T1_BOARDROOM, T2_REGULATORS, T3_MEDIA, T4_PUBLIC)
-    forms a connected sub-graph with top 2 Cluster Hubs per tier, intra-tier reports_to/influenced_by
-    edges, and cross-tier debate links.
-    """
+async def get_scenario_graph_endpoint(
+    id: str,
+    round: Optional[int] = Query(None),
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
+    if not id or id == "scen-01":
+        return ScenarioGraphResponse(scenario_id="", nodes=[], edges=[])
+    user_id = current_user.get("id") if current_user else None
+    verify_scenario_access(id, user_id)
     return graph_service.get_scenario_graph(id, round_num=round)
 
 @router.post("/{id}/extract")
-async def extract_scenario_graph(id: str, document_id: Optional[str] = Query(None)):
+async def extract_scenario_graph(
+    id: str,
+    document_id: Optional[str] = Query(None),
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
+    user_id = current_user.get("id") if current_user else None
+    verify_scenario_access(id, user_id)
     doc_id = document_id or "doc-default"
     logger.info(f"[Scenarios API] Extracting scenario graph for scenario '{id}' using document '{doc_id}'")
     result = await orchestrator.run_scenario_pipeline(id, doc_id)
     return result
 
 @router.post("/{id}/generate-personas")
-async def generate_scenario_personas(id: str):
+async def generate_scenario_personas(
+    id: str,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
+    user_id = current_user.get("id") if current_user else None
+    verify_scenario_access(id, user_id)
     logger.info(f"[Scenarios API] Generating 200 Heavy Agent personas for scenario '{id}'")
     personas = persona_service.generate_personas_for_scenario(id)
     return {"scenario_id": id, "generated_count": len(personas), "agents": personas[:5]}
 
 @router.post("/{id}/simulate")
-async def start_scenario_simulation(id: str):
+async def start_scenario_simulation(
+    id: str,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
+    user_id = current_user.get("id") if current_user else None
+    verify_scenario_access(id, user_id)
     logger.info(f"[Scenarios API] Triggering simulation execution for scenario '{id}'")
     return {"scenario_id": id, "status": "RUNNING", "currentRound": 1, "totalRounds": 5}
 
@@ -173,21 +235,25 @@ class RunBaselineRequest(BaseModel):
     is_what_if: Optional[bool] = False
 
 @router.post("/run-baseline")
-async def run_baseline_scenario(payload: RunBaselineRequest):
+async def run_baseline_scenario(
+    payload: RunBaselineRequest,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
     logger.info(f"[Scenarios API] Running baseline simulation: '{payload.name}'")
     scen_id = f"scen-{uuid.uuid4().hex[:6]}"
     created_date = datetime.datetime.now().strftime("%Y-%m-%d")
     title = (payload.name or "Strategic Scenario").strip()
     desc = payload.description or payload.goal_prompt or "Evaluate baseline strategy operational impact"
     doc_id = payload.document_id or "doc-default"
+    user_id = current_user.get("id") if current_user else None
 
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute(
-            """INSERT INTO scenarios (id, name, description, document_id, created_date, last_simulation, status, agent_count, overall_risk_score)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (scen_id, title, desc, doc_id, created_date, "Never", "RUNNING_BASELINE", 200, 28)
+            """INSERT INTO scenarios (id, name, description, document_id, created_date, last_simulation, status, agent_count, overall_risk_score, user_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (scen_id, title, desc, doc_id, created_date, "Never", "RUNNING_BASELINE", 200, 28, user_id)
         )
         conn.commit()
     finally:
@@ -202,7 +268,6 @@ async def run_baseline_scenario(payload: RunBaselineRequest):
                 description=desc
             )
             agents = persona_service.generate_personas_for_scenario(scen_id, total_agents=200)
-            from app.engine.oasis_engine import oasis_engine
             await oasis_engine.run_full_simulation(
                 scenario_id=scen_id,
                 agents=agents,
@@ -225,7 +290,13 @@ async def run_baseline_scenario(payload: RunBaselineRequest):
     }
 
 @router.post("/{id}/run-baseline")
-async def run_baseline_scenario_by_id(id: str, payload: Optional[RunBaselineRequest] = None):
+async def run_baseline_scenario_by_id(
+    id: str,
+    payload: Optional[RunBaselineRequest] = None,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
+    user_id = current_user.get("id") if current_user else None
+    verify_scenario_access(id, user_id)
     logger.info(f"[Scenarios API] Triggering baseline simulation for existing scenario '{id}'")
     goal = payload.goal_prompt if payload and payload.goal_prompt else "Evaluate baseline strategy operational impact"
     
@@ -240,7 +311,6 @@ async def run_baseline_scenario_by_id(id: str, payload: Optional[RunBaselineRequ
     async def execute_existing_baseline():
         try:
             agents = persona_service.generate_personas_for_scenario(id, total_agents=200)
-            from app.engine.oasis_engine import oasis_engine
             await oasis_engine.run_full_simulation(
                 scenario_id=id,
                 agents=agents,
@@ -261,14 +331,13 @@ class RunWhatIfRequest(BaseModel):
     risk_threshold: Optional[float] = 35.0
 
 @router.post("/{id}/run-what-if")
-async def run_what_if_simulation(id: str, payload: RunWhatIfRequest):
-    """
-    Phase B What-If Re-Simulation:
-    1. Flushes previous simulation steps, feed events, and reports for this scenario ID.
-    2. Resets agent stances to baseline.
-    3. Executes 5-round simulation with Round 3 shock injection.
-    4. Triggers Observer Agent for stressed risk synthesis.
-    """
+async def run_what_if_simulation(
+    id: str,
+    payload: RunWhatIfRequest,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
+    user_id = current_user.get("id") if current_user else None
+    verify_scenario_access(id, user_id)
     logger.info(f"[Scenarios API] Running Phase B What-If re-simulation for '{id}' with prompt: '{payload.goal_prompt}'")
     goal = payload.goal_prompt
     shock = payload.shock_event or f"CRITICAL SHOCK: Unannounced strategic shock & operational friction for '{goal[:40]}'."
@@ -276,23 +345,17 @@ async def run_what_if_simulation(id: str, payload: RunWhatIfRequest):
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        
-        # Cascade flush previous simulation run records for clean re-run
         cursor.execute("DELETE FROM feed_events WHERE scenario_id = ?", (id,))
-        cursor.execute("DELETE FROM oasis_simulation_steps WHERE id LIKE ? OR agent_id LIKE ?", (f"%{id}%", f"%{id}%"))
-        cursor.execute("DELETE FROM oasis_agent_trajectories WHERE agent_id LIKE ?", (f"%{id}%",))
-        cursor.execute("DELETE FROM scenario_reports WHERE scenario_id = ?", (id,))
-        cursor.execute("DELETE FROM risks WHERE scenario_id = ?", (id,))
-        cursor.execute("UPDATE agents SET current_state = 'IDLE', sentiment = 'NEUTRAL' WHERE scenario_id = ?", (id,))
-        cursor.execute("UPDATE scenarios SET status = 'RUNNING_WHAT_IF', description = ? WHERE id = ?", (goal, id))
+        cursor.execute("DELETE FROM oasis_simulation_steps WHERE scenario_id = ?", (id,))
+        cursor.execute("DELETE FROM reports WHERE scenario_id = ?", (id,))
+        cursor.execute("UPDATE scenarios SET status = 'RUNNING_WHAT_IF' WHERE id = ?", (id,))
         conn.commit()
     finally:
         conn.close()
 
-    async def execute_what_if_pipeline():
+    async def execute_what_if():
         try:
             agents = persona_service.generate_personas_for_scenario(id, total_agents=200)
-            from app.engine.oasis_engine import oasis_engine
             await oasis_engine.run_full_simulation(
                 scenario_id=id,
                 agents=agents,
@@ -302,17 +365,20 @@ async def run_what_if_simulation(id: str, payload: RunWhatIfRequest):
                 is_what_if=True
             )
         except Exception as err:
-            logger.error(f"[What-If Pipeline Error for {id}]: {err}")
+            logger.error(f"[What-If Error for {id}]: {err}")
 
-    asyncio.create_task(execute_what_if_pipeline())
-    return {"scenario_id": id, "status": "RUNNING"}
+    asyncio.create_task(execute_what_if())
+    return {"scenario_id": id, "status": "RUNNING_WHAT_IF", "shock_event": shock}
 
 @router.delete("/{id}")
-async def delete_scenario_permanently(id: str):
-    """
-    Transactional Hard Cascade Removal across all related tables in database.
-    """
-    logger.info(f"[Scenarios API] Hard deleting scenario and all associated data for '{id}'")
+async def delete_scenario(
+    id: str,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
+    user_id = current_user.get("id") if current_user else None
+    verify_scenario_access(id, user_id)
+
+    logger.info(f"[Scenarios API] Deleting scenario: {id}")
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -356,5 +422,3 @@ async def delete_scenario_permanently(id: str):
         conn.close()
 
     return {"status": "deleted", "scenario_id": id, "success": True}
-
-

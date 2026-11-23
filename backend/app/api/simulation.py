@@ -1,6 +1,6 @@
 import asyncio
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request, Header, Depends
 from pydantic import BaseModel, Field
 
 from app.models.simulation import SimulationStateModel, FeedEventModel, RiskVectorModel
@@ -9,13 +9,83 @@ from app.services.simulation_service import simulation_service
 from app.services.report_service import report_service
 from app.services.persona_service import persona_service
 from app.engine.oasis_engine import oasis_engine
-from app.storage.database import get_db_connection
+from app.storage.database import get_db_connection, get_db_transaction, execute_query
+from app.core.logging import logger
+from app.core.security import get_optional_current_user, verify_scenario_access
 
 router = APIRouter(tags=["simulation"])
 
+async def check_quota_and_guard_byok(request: Request):
+    """
+    BYOK Priority & Quota Guard:
+    1. Read user-provided API keys from request headers (X-Gemini-Key / X-Groq-Key / X-OpenAI-Key / X-Anthropic-Key / X-OpenRouter-Key / x-api-key) strictly in memory.
+       Never log or persist raw user keys in PostgreSQL.
+    2. If valid BYOK key is present, allow unlimited simulation runs.
+    3. If no BYOK key is provided, decrement free_sessions_remaining; if 0, return 403 Forbidden.
+    """
+    x_gemini = request.headers.get("x-gemini-key") or ""
+    x_groq = request.headers.get("x-groq-key") or ""
+    x_openai = request.headers.get("x-openai-key") or ""
+    x_anthropic = request.headers.get("x-anthropic-key") or ""
+    x_openrouter = request.headers.get("x-openrouter-key") or ""
+    x_api_key = request.headers.get("x-api-key") or ""
+
+    has_valid_byok = False
+    for k in [x_gemini, x_groq, x_openai, x_anthropic, x_openrouter]:
+        k_clean = k.strip()
+        if len(k_clean) >= 15:
+            has_valid_byok = True
+            break
+
+    if not has_valid_byok and x_api_key:
+        if any(prefix in x_api_key for prefix in ["AIza", "AQ.", "gsk_", "sk-", "sk-ant-", "sk-or-"]) and len(x_api_key) >= 15:
+            has_valid_byok = True
+
+    if has_valid_byok:
+        logger.info("[Quota Guard] Valid BYOK key verified in memory. Unlimited simulation permitted.")
+        return {"unlimited": True, "byok": True}
+
+    # No BYOK key provided -> inspect session quota from HttpOnly cookie or bearer token
+    user = await get_optional_current_user(request)
+    if not user:
+        logger.warning("[Quota Guard] Anonymous simulation attempt without BYOK keys.")
+        raise HTTPException(
+            status_code=403,
+            detail="Free runs used. Add your free Gemini or Groq API key in the top bar for unlimited simulations."
+        )
+
+    user_id = user["id"]
+    free_remaining = user.get("free_sessions_remaining")
+    if free_remaining is None:
+        free_remaining = 2
+    total_runs = user.get("total_sessions_run", 0) or 0
+
+    if free_remaining <= 0:
+        logger.warning(f"[Quota Guard] User {user_id} has exhausted free courtesy runs.")
+        raise HTTPException(
+            status_code=403,
+            detail="Free runs used. Add your free Gemini or Groq API key in the top bar for unlimited simulations."
+        )
+
+    new_free = max(0, free_remaining - 1)
+    new_total = total_runs + 1
+
+    with get_db_transaction() as t_conn:
+        t_cursor = t_conn.cursor()
+        execute_query(
+            t_cursor,
+            "UPDATE users SET free_sessions_remaining = ?, total_sessions_run = ? WHERE id = ?",
+            (new_free, new_total, user_id)
+        )
+
+    logger.info(f"[Quota Guard] Deducted courtesy run for user {user_id}. Remaining: {new_free}")
+    return {"unlimited": False, "free_sessions_remaining": new_free}
+
 @router.get("/scenarios/{id}/simulation", response_model=SimulationStateModel)
 @router.get("/scenarios/{id}/simulation/status", response_model=SimulationStateModel)
-async def get_simulation_status(id: str):
+async def get_simulation_status(id: str, request: Request):
+    user = await get_optional_current_user(request)
+    verify_scenario_access(id, user.get("id") if user else None)
     return SimulationStateModel(
         scenario_id=id,
         currentRound=orchestrator_engine.current_round,
@@ -29,7 +99,10 @@ async def get_simulation_status(id: str):
     )
 
 @router.post("/scenarios/{id}/simulation/play")
-async def play_simulation(id: str):
+async def play_simulation(id: str, request: Request):
+    user = await get_optional_current_user(request)
+    verify_scenario_access(id, user.get("id") if user else None)
+    await check_quota_and_guard_byok(request)
     if len(orchestrator_engine.agents) == 0:
         await orchestrator_engine.initialize_simulation(id)
     # Start play task asynchronously
@@ -37,12 +110,24 @@ async def play_simulation(id: str):
     return {"scenario_id": id, "status": "RUNNING", "currentRound": orchestrator_engine.current_round}
 
 @router.post("/scenarios/{id}/simulation/pause")
-async def pause_simulation(id: str):
+async def pause_simulation(id: str, request: Request):
+    user = await get_optional_current_user(request)
+    verify_scenario_access(id, user.get("id") if user else None)
     await orchestrator_engine.pause()
     return {"scenario_id": id, "status": "PAUSED", "currentRound": orchestrator_engine.current_round}
 
 @router.post("/scenarios/{id}/simulation/step")
-async def step_simulation(id: str):
+async def step_simulation(id: str, request: Request):
+    user = await get_optional_current_user(request)
+    verify_scenario_access(id, user.get("id") if user else None)
+    await check_quota_and_guard_byok(request)
+    if len(orchestrator_engine.agents) == 0:
+        await orchestrator_engine.initialize_simulation(id)
+    await orchestrator_engine.step()
+    return {"scenario_id": id, "status": "STEPPED", "currentRound": orchestrator_engine.current_round}
+    # Only deduct on start of a new round
+    if orchestrator_engine.status != "RUNNING" and orchestrator_engine.current_round == 0:
+        await check_quota_and_guard_byok(request)
     if len(orchestrator_engine.agents) == 0:
         await orchestrator_engine.initialize_simulation(id)
     await orchestrator_engine.step()
@@ -60,11 +145,13 @@ async def get_scenario_events(id: str):
 @router.get("/simulation/feed")
 @router.get("/api/simulation/feed")
 async def get_simulation_feed(
-    scenario_id: Optional[str] = Query("scen-01"),
+    scenario_id: Optional[str] = Query(None),
     channel: Optional[str] = Query(None),
     tier: Optional[str] = Query(None)
 ):
-    scen_id = scenario_id or "scen-01"
+    scen_id = scenario_id
+    if not scen_id or scen_id == "scen-01":
+        return []
     conn = get_db_connection()
     try:
         cursor = conn.cursor()

@@ -2,19 +2,30 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { GeneratingSimulationCard } from "@/components/layout/GeneratingSimulationCard";
 import { ShieldAlert, Users, Network, FolderGit2, ArrowRight, Play, Sparkles, Activity, AlertTriangle, Layers, FileUp } from "lucide-react";
 import { reportApi } from "@/lib/api/reportApi";
-
+import { useAuth } from "@/context/AuthContext";
+import { authService } from "@/lib/api/authService";
 import { getActiveScenarioId, getActiveDocName, autoInitializeActiveScenario } from "@/lib/api/scenarioApi";
 
 export default function OverviewPage() {
+  const router = useRouter();
+  const { isAuthenticated } = useAuth();
   const [risksData, setRisksData] = useState<any>(null);
   const [turningPoints, setTurningPoints] = useState<any[]>([]);
   const [activeDoc, setActiveDoc] = useState<string | null>(null);
   const [activeScenario, setActiveScenario] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+
+  // When logged out, do not stay in dashboard - redirect to overview page
+  useEffect(() => {
+    if (!isAuthenticated && !authService.getCurrentUser()) {
+      window.location.href = "/";
+    }
+  }, [isAuthenticated]);
 
   const syncDoc = async (): Promise<string | null> => {
     if (typeof window !== "undefined") {

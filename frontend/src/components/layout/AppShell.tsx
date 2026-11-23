@@ -7,6 +7,7 @@ import { TimelineScrubber } from "@/components/timeline/TimelineScrubber";
 import { DocumentUploadModal } from "@/components/upload/DocumentUploadModal";
 import { AgentInterrogationModal } from "@/components/interrogation/AgentInterrogationModal";
 import { ApiKeyGateModal } from "@/components/auth/ApiKeyGateModal";
+import { NewUserOnboarding } from "@/components/onboarding/NewUserOnboarding";
 import { keyService } from "@/lib/api/keyService";
 import { Agent } from "@/types";
 import { autoInitializeActiveScenario } from "@/lib/api/scenarioApi";
@@ -31,7 +32,7 @@ export const AppShell: React.FC<AppShellProps> = ({ title, subtitle, children })
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
 
   // API Key Gate state
-  const [isApiKeyMissing, setIsApiKeyMissing] = useState(false);
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -64,18 +65,8 @@ export const AppShell: React.FC<AppShellProps> = ({ title, subtitle, children })
   }, [currentRound, simulationStatus, mounted]);
 
   useEffect(() => {
-    const checkKeys = () => {
-      const keys = keyService.getKeys();
-      if (keys.length === 0) {
-        setIsApiKeyMissing(true);
-      } else {
-        setIsApiKeyMissing(false);
-      }
-    };
-
-    checkKeys();
-
     const handleOpenUpload = () => setIsUploadOpen(true);
+    const handleOpenKeyModal = () => setIsKeyModalOpen(true);
     const handleDocUpdated = () => {
       if (typeof window !== "undefined") {
         const savedDoc = localStorage.getItem("SWARMLENS_ACTIVE_DOC_NAME") || localStorage.getItem("LOKI_ACTIVE_DOC_NAME");
@@ -132,8 +123,8 @@ export const AppShell: React.FC<AppShellProps> = ({ title, subtitle, children })
       }
     };
 
-    window.addEventListener("loki_keys_empty", checkKeys);
-    window.addEventListener("loki_keys_updated", checkKeys);
+    window.addEventListener("loki_quota_exceeded", handleOpenKeyModal);
+    window.addEventListener("loki_open_keys", handleOpenKeyModal);
     window.addEventListener("loki_open_upload", handleOpenUpload);
     window.addEventListener("swarmlens_open_upload", handleOpenUpload);
     window.addEventListener("loki_doc_updated", handleDocUpdated);
@@ -142,8 +133,8 @@ export const AppShell: React.FC<AppShellProps> = ({ title, subtitle, children })
     window.addEventListener("swarmlens_start_simulation", handleStartSimulationEvent);
     window.addEventListener("swarmlens_force_complete", handleForceComplete);
     return () => {
-      window.removeEventListener("loki_keys_empty", checkKeys);
-      window.removeEventListener("loki_keys_updated", checkKeys);
+      window.removeEventListener("loki_quota_exceeded", handleOpenKeyModal);
+      window.removeEventListener("loki_open_keys", handleOpenKeyModal);
       window.removeEventListener("loki_open_upload", handleOpenUpload);
       window.removeEventListener("swarmlens_open_upload", handleOpenUpload);
       window.removeEventListener("loki_doc_updated", handleDocUpdated);
@@ -280,6 +271,10 @@ export const AppShell: React.FC<AppShellProps> = ({ title, subtitle, children })
 
         {/* Main Work Area */}
         <main className="flex-1 overflow-y-auto p-6 bg-base">
+          <NewUserOnboarding
+            onOpenKeyModal={() => setIsKeyModalOpen(true)}
+            onOpenUploadModal={() => setIsUploadOpen(true)}
+          />
           {children({
             currentRound,
             simulationStatus,
@@ -304,12 +299,12 @@ export const AppShell: React.FC<AppShellProps> = ({ title, subtitle, children })
         )}
       </div>
 
-      {/* Required API Key Gate Modal on App Launch */}
+      {/* API Key Modal on Quota Exceeded or Manual Open */}
       <ApiKeyGateModal
-        isOpen={isApiKeyMissing}
-        onClose={() => setIsApiKeyMissing(false)}
-        isRequired={true}
-        onKeySubmitted={() => setIsApiKeyMissing(false)}
+        isOpen={isKeyModalOpen}
+        onClose={() => setIsKeyModalOpen(false)}
+        isRequired={false}
+        onKeySubmitted={() => setIsKeyModalOpen(false)}
       />
 
       {/* Document Ingestion Modal */}

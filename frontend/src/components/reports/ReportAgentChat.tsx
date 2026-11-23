@@ -35,7 +35,7 @@ const STARTER_PROMPTS = [
 ];
 
 export const ReportAgentChat: React.FC<ReportAgentChatProps> = ({
-  scenarioId = "scen-01",
+  scenarioId = "",
   scenarioName = "Active Scenario",
   documentName = "Uploaded Strategy Document",
 }) => {

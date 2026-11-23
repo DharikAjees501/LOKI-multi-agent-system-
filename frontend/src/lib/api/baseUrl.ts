@@ -2,11 +2,12 @@
  * Centralized API base URL resolver for LOKI SwarmLens.
  * Normalizes URLs across local dev, Render, and Vercel deployments.
  */
+const isDev = process.env.NODE_ENV !== "production";
+
 export function getApiBaseUrl(): string {
   // 1. IN THE BROWSER (Client-side):
   if (typeof window !== "undefined") {
     // ALWAYS use relative "/api" in the browser so requests proxy through Next.js / Vercel rewrite
-    // This routes directly through the current origin without any hostname or CORS issues
     return "/api";
   }
 
@@ -34,7 +35,7 @@ export function getApiBaseUrl(): string {
     return `https://${process.env.VERCEL_URL}/api`;
   }
 
-  return "https://swarmlens-backend.onrender.com/api";
+  return isDev ? "http://127.0.0.1:8000/api" : "https://swarmlens-backend.onrender.com/api";
 }
 
 export const API_BASE_URL = getApiBaseUrl();

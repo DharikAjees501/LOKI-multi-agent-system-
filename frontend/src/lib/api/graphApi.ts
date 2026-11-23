@@ -57,12 +57,16 @@ class GraphApiService {
       (typeof window !== "undefined"
         ? localStorage.getItem("SWARMLENS_ACTIVE_SCENARIO_ID") ||
           localStorage.getItem("LOKI_ACTIVE_SCENARIO_ID") ||
-          "scen-01"
-        : "scen-01");
+          ""
+        : "");
+
+    if (!activeScenId || activeScenId === "scen-01") {
+      return { nodes: [], edges: [] };
+    }
 
     try {
       const graphUrl = `${API_BASE_URL}/scenarios/${activeScenId}/graph?round=${roundNum}`;
-      const res = await fetch(graphUrl).catch(() => null);
+      const res = await fetch(graphUrl, { credentials: "include" }).catch(() => null);
       if (res && res.ok) {
         const data = await res.json().catch(() => null);
         if (data && Array.isArray(data.nodes) && data.nodes.length >= 10) {
@@ -218,15 +222,18 @@ class GraphApiService {
   }
 
   async getKnowledgeGraph(
-    scenarioId: string = "scen-01",
+    scenarioId?: string,
     roundNum: number = 1
   ): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }> {
+    if (!scenarioId || scenarioId === "scen-01") {
+      return { nodes: [], edges: [] };
+    }
     let resultNodes: GraphNode[] = [];
     let resultEdges: GraphEdge[] = [];
 
     if (!IS_MOCK_MODE) {
       try {
-        const res = await fetch(`${API_BASE_URL}/scenarios/${scenarioId}/graph`).catch(() => null);
+        const res = await fetch(`${API_BASE_URL}/scenarios/${scenarioId}/graph`, { credentials: "include" }).catch(() => null);
         if (res && res.ok) {
           const data = await res.json().catch(() => null);
           if (data && Array.isArray(data.nodes) && data.nodes.length > 0) {

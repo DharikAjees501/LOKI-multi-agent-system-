@@ -14,6 +14,7 @@ class DocumentModel(BaseModel):
     chunk_count: int
     status: str = "READY"
     created_at: str
+    user_id: Optional[str] = None
 
 class DocumentUploadResponse(BaseModel):
     document_id: str

@@ -1,26 +1,27 @@
-from fastapi import APIRouter, Query, Response, HTTPException
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
-from typing import Dict, Any, Optional, List, Tuple
 import json
 import re
+from typing import Any
+
 import edge_tts
-from app.services.report_service import report_service
-from app.storage.database import get_db_connection
 from app.core.logging import logger
 from app.engine.llm_client import execute_multi_provider_llm_call
+from app.services.report_service import report_service
+from app.storage.database import get_db_connection
+from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 router = APIRouter(tags=["reports"])
 
 class TTSStreamRequest(BaseModel):
     text: str
-    voice: Optional[str] = "en-US-ChristopherNeural"
-    rate: Optional[str] = "+5%"
-    pitch: Optional[str] = "+0Hz"
+    voice: str | None = "en-US-ChristopherNeural"
+    rate: str | None = "+5%"
+    pitch: str | None = "+0Hz"
 
 class ReportChatRequest(BaseModel):
     message: str = Field(..., min_length=2, max_length=1000)
-    history: List[Dict[str, str]] = Field(default_factory=list)
+    history: list[dict[str, str]] = Field(default_factory=list)
 
 @router.post("/reports/tts")
 @router.post("/api/reports/tts")
@@ -79,12 +80,12 @@ async def get_edge_tts_voices():
     ]
 
 @router.get("/scenarios/{id}/report")
-async def get_scenario_report(id: str, round: Optional[int] = Query(None)):
+async def get_scenario_report(id: str, round: int | None = Query(None)):
     logger.info(f"[Reports API] Generating synthesis executive report for scenario: {id} (Round: {round})")
     return report_service.get_report_for_scenario(id, round_num=round)
 
 @router.get("/scenarios/{id}/risks")
-async def get_scenario_risks(id: str, round: Optional[int] = Query(None)):
+async def get_scenario_risks(id: str, round: int | None = Query(None)):
     return report_service.get_risks(id, round_num=round)
 
 @router.get("/scenarios/{id}/sentiment")
@@ -92,7 +93,7 @@ async def get_scenario_sentiment(id: str):
     return report_service.get_sentiment(id)
 
 @router.get("/scenarios/{id}/consensus")
-async def get_scenario_consensus(id: str, round: Optional[int] = Query(None)):
+async def get_scenario_consensus(id: str, round: int | None = Query(None)):
     return report_service.get_consensus(id, round_num=round)
 
 @router.get("/scenarios/{id}/turning-points")
@@ -104,7 +105,7 @@ async def get_scenario_raci(id: str):
     return report_service.get_raci_matrix(id)
 
 @router.get("/scenarios/{id}/risk-threshold-monitor")
-async def get_scenario_risk_threshold_monitor(id: str, threshold: Optional[float] = Query(35.0)):
+async def get_scenario_risk_threshold_monitor(id: str, threshold: float | None = Query(35.0)):
     conf_val = float(threshold if threshold is not None else 35.0)
     return report_service.get_risk_threshold_monitor(id, configured_threshold=conf_val)
 
@@ -125,8 +126,16 @@ async def export_scenario_report(id: str, format: str = Query("json")):
 
 @router.get("/reports/summary")
 @router.get("/api/reports/summary")
-async def get_report_summary(scenario_id: Optional[str] = Query("scen-01")):
-    scen_id = scenario_id or "scen-01"
+async def get_report_summary(scenario_id: str | None = Query(None)):
+    scen_id = scenario_id
+    if not scen_id or scen_id == "scen-01":
+        return {
+            "scenario_id": "",
+            "risk_score": 0,
+            "primary_concern": "No active scenario",
+            "overall_consensus": 0,
+            "sentimentBreakdown": {"positive": 0, "neutral": 0, "negative": 0, "critical": 0}
+        }
     rep = report_service.get_report_for_scenario(scen_id)
     sent = rep.get("sentimentBreakdown", {})
     return {
@@ -175,14 +184,12 @@ def is_mocked_or_stale_text(content: Any, doc_name: str) -> bool:
     is_aero = any(k in d_low for k in ["drone", "aerospace", "aviation", "robotics", "satellite", "avionics", "surgical"])
 
     # If not aerospace but contains drone/faa-grade/mesh network/neuromorphic/iiot
-    if not is_aero and any(b in s for b in [
+    return bool(not is_aero and any(b in s for b in [
         "drone", "faa-grade", "neuromorphic", "iiot industrial", "mesh network", 
         "deterministic routing", "langgraph execution without faa"
-    ]):
-        return True
-    return False
+    ]))
 
-def check_input_guardrails(query: str, doc_name: str, scenario_name: str) -> Optional[Dict[str, Any]]:
+def check_input_guardrails(query: str, doc_name: str, scenario_name: str) -> dict[str, Any] | None:
     """
     Pre-LLM Input Guardrails:
     1. Blocks code generation and API/architecture probing.
@@ -247,11 +254,11 @@ def check_input_guardrails(query: str, doc_name: str, scenario_name: str) -> Opt
 
 def apply_output_guardrails(
     reply_text: str,
-    raw_citations: List[str],
+    raw_citations: list[str],
     doc_name: str,
     scenario_name: str,
-    valid_roles: List[str]
-) -> Tuple[str, List[str]]:
+    valid_roles: list[str]
+) -> tuple[str, list[str]]:
     """
     Post-LLM Output Guardrails:
     1. Redacts code blocks, SQL, script syntax, and developer artifacts.
@@ -269,17 +276,16 @@ def apply_output_guardrails(
 
     # 2. Tone & Objective Phrasing (Convert first-person AI talk to objective simulation reporting)
     first_person_subs = [
-        (r'\b(i\s+personally\s+think|i\s+personally\s+believe|in\s+my\s+personal\s+opinion)\b', 'Simulation findings indicate', re.I),
-        (r'\b(as\s+an\s+ai(\s+language\s+model)?|as\s+a\s+machine\s+learning\s+model)\b', 'Based on 200-agent simulation consensus', re.I),
-        (r'\b(i\s+think|i\s+believe|i\s+feel)\b', 'The simulation data shows', re.I),
-        (r'\b(i\s+cannot\s+provide\s+personal\s+opinions)\b', 'Simulation results are strictly empirical', re.I),
+        (r'\b(i\s+personally\s+think|i\s+personally\s+believe|in\s+my\s+personal\s+opinion)\b', 'Simulation findings indicate', re.IGNORECASE),
+        (r'\b(as\s+an\s+ai(\s+language\s+model)?|as\s+a\s+machine\s+learning\s+model)\b', 'Based on 200-agent simulation consensus', re.IGNORECASE),
+        (r'\b(i\s+think|i\s+believe|i\s+feel)\b', 'The simulation data shows', re.IGNORECASE),
+        (r'\b(i\s+cannot\s+provide\s+personal\s+opinions)\b', 'Simulation results are strictly empirical', re.IGNORECASE),
     ]
     for pat, repl, flags in first_person_subs:
         text = re.sub(pat, repl, text, flags=flags)
 
     # 3. Clean and verify citations
     valid_citations = []
-    allowed_anchors = ["Consensus Split", "Executive Summary", "Action Playbook", "Risk Vectors", "Simulation Metrics", doc_name]
 
     for c in raw_citations:
         c_str = str(c).strip()
@@ -322,9 +328,9 @@ async def chat_with_report_agent(scenario_id: str, payload: ReportChatRequest):
     if not user_query:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
-    valid_roles: List[str] = []
-    citations: List[str] = []
-    reply_text: Optional[str] = None
+    valid_roles: list[str] = []
+    citations: list[str] = []
+    reply_text: str | None = None
 
     # 1. Single Short-Lived Database Session (Context Retrieval)
     conn = get_db_connection()
@@ -397,9 +403,9 @@ async def chat_with_report_agent(scenario_id: str, payload: ReportChatRequest):
             d_clean = doc_name.replace(".pdf", "").replace("_", " ")
             agent_posts = [
                 {"round": 4, "agent_name": "Agent 15", "role": "Brand Governance Lead", "message": f"Brand compliance safeguards under '{d_clean}' must be enforced before automated publishing.", "sentiment": "CRITICAL", "channel": "OPERATIONS", "tier": 1, "final_stance": -0.45},
-                {"round": 3, "agent_name": "Agent 28", "role": "Performance Media Buyer", "message": f"Uncapped automated daily budget shifts risk substantial spend slippage during market volatility.", "sentiment": "NEGATIVE", "channel": "MEDIA", "tier": 2, "final_stance": -0.38},
-                {"round": 2, "agent_name": "Agent 42", "role": "Digital Agency Director", "message": f"Agencies require white-label client portals and multi-tenant approval controls to protect retainer margins.", "sentiment": "NEGATIVE", "channel": "BOARDROOM", "tier": 3, "final_stance": -0.32},
-                {"round": 1, "agent_name": "Agent 08", "role": "Growth Marketing Director", "message": f"Creative acceleration and automated variant testing offer substantial efficiency leverage.", "sentiment": "POSITIVE", "channel": "BOARDROOM", "tier": 1, "final_stance": 0.52}
+                {"round": 3, "agent_name": "Agent 28", "role": "Performance Media Buyer", "message": "Uncapped automated daily budget shifts risk substantial spend slippage during market volatility.", "sentiment": "NEGATIVE", "channel": "MEDIA", "tier": 2, "final_stance": -0.38},
+                {"round": 2, "agent_name": "Agent 42", "role": "Digital Agency Director", "message": "Agencies require white-label client portals and multi-tenant approval controls to protect retainer margins.", "sentiment": "NEGATIVE", "channel": "BOARDROOM", "tier": 3, "final_stance": -0.32},
+                {"round": 1, "agent_name": "Agent 08", "role": "Growth Marketing Director", "message": "Creative acceleration and automated variant testing offer substantial efficiency leverage.", "sentiment": "POSITIVE", "channel": "BOARDROOM", "tier": 1, "final_stance": 0.52}
             ]
 
         valid_roles = [str(p["role"]) for p in agent_posts if p.get("role")]

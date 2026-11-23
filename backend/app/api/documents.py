@@ -1,12 +1,13 @@
 import os
-from typing import Optional
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from typing import Optional, Dict, Any
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Header, Request, Depends
 from app.core.config import settings
 from app.services.document_service import document_service
 from app.engine.orchestrator import orchestrator
 from app.models.document import DocumentUploadResponse
 from app.core.logging import logger
 from app.storage.database import get_db_connection, log_audit_event
+from app.core.security import get_optional_current_user, get_current_user, verify_document_access
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -14,10 +15,13 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 async def upload_document(
     file: UploadFile = File(...),
     scenario_title: Optional[str] = Form(None),
-    description: Optional[str] = Form(None)
+    description: Optional[str] = Form(None),
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
 ):
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename cannot be empty")
+
+    user_id = current_user.get("id") if current_user else None
 
     safe_filename = os.path.basename(file.filename)
     ext = os.path.splitext(safe_filename)[1].lower()
@@ -35,24 +39,25 @@ async def upload_document(
             status_code=413,
             detail=f"File size ({len(content)} bytes) exceeds maximum limit of {settings.MAX_UPLOAD_SIZE_BYTES} bytes (15 MB)."
         )
-    logger.info(f"[Documents API] Processing upload request for file: {safe_filename} (Size: {len(content)} bytes)")
-    response = document_service.process_and_store_document(content, safe_filename)
+    logger.info(f"[Documents API] Processing upload request for file: {safe_filename} (Size: {len(content)} bytes, User: {user_id})")
+    response = document_service.process_and_store_document(content, safe_filename, user_id=user_id)
 
     log_audit_event("DOCUMENT_UPLOAD", "USER", f"Uploaded file {safe_filename} (Doc ID: {response.document_id}).")
     logger.info(f"[Documents API] Document upload completed successfully for {safe_filename} (Doc ID: {response.document_id})")
     return response
 
 @router.get("/{document_id}")
-async def get_document(document_id: str):
+async def get_document(
+    document_id: str,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
     logger.info(f"[Documents API] Fetching document metadata & chunks for ID: {document_id}")
+    user_id = current_user.get("id") if current_user else None
+    doc = verify_document_access(document_id, user_id)
+
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM documents WHERE id = ?", (document_id,))
-        doc = cursor.fetchone()
-        if not doc:
-            raise HTTPException(status_code=404, detail="Document not found")
-
         cursor.execute("SELECT chunk_index, text, char_length FROM document_chunks WHERE document_id = ? ORDER BY chunk_index ASC", (document_id,))
         chunks = cursor.fetchall()
 
@@ -69,8 +74,14 @@ async def get_document(document_id: str):
         conn.close()
 
 @router.delete("/{document_id}")
-async def delete_document(document_id: str):
+async def delete_document(
+    document_id: str,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
     logger.info(f"[Documents API] Deleting document and cascading scenarios: {document_id}")
+    user_id = current_user.get("id") if current_user else None
+    verify_document_access(document_id, user_id)
+
     conn = get_db_connection()
     cursor = conn.cursor()
     try:

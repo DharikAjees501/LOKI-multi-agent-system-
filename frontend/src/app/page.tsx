@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Waypoints,
   Play,
@@ -21,15 +22,36 @@ import {
   Cpu,
   ChevronRight,
 } from "lucide-react";
-import { GraphCanvas } from "@/components/graph/GraphCanvas";
-import { graphApi } from "@/lib/api/graphApi";
-import { GraphNode, GraphEdge } from "@/types";
+import { useAuth } from "@/context/AuthContext";
+import { AuthModal } from "@/components/auth/AuthModal";
+import { keyService } from "@/lib/api/keyService";
 
 export default function LandingPage() {
-  const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
+  const router = useRouter();
+  const { user, isAuthenticated, openAuthModal, logout } = useAuth();
+  const [mounted, setMounted] = useState(false);
+  const [hasValidKey, setHasValidKey] = useState(false);
+
+  const handleLaunchSwarm = () => {
+    if (isAuthenticated) {
+      router.push("/dashboard");
+    } else {
+      router.push("/login");
+    }
+  };
 
   useEffect(() => {
-    graphApi.getSwarmGraph("scen-01").then(setGraphData).catch(() => {});
+    setMounted(true);
+    const checkKeys = () => {
+      setHasValidKey(keyService.hasValidBYOK() || keyService.getKeys().length > 0);
+    };
+    checkKeys();
+    window.addEventListener("loki_keys_updated", checkKeys);
+    window.addEventListener("loki_keys_empty", checkKeys);
+    return () => {
+      window.removeEventListener("loki_keys_updated", checkKeys);
+      window.removeEventListener("loki_keys_empty", checkKeys);
+    };
   }, []);
   return (
     <div className="min-h-screen bg-base text-ink font-body selection:bg-accent/20 selection:text-ink">
@@ -63,24 +85,75 @@ export default function LandingPage() {
               <span>Use Cases</span>
               <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
             </Link>
-            <a href="#demo" className="hover:text-accent transition-colors">
-              Interactive Demo
-            </a>
-            <Link href="/dashboard" className="hover:text-accent transition-colors flex items-center gap-1 font-mono text-accent">
+            <button
+              onClick={handleLaunchSwarm}
+              className="hover:text-accent transition-colors flex items-center gap-1 font-mono text-accent cursor-pointer"
+            >
               <span>Platform App</span>
               <ChevronRight className="h-3 w-3" />
-            </Link>
+            </button>
           </nav>
 
-          {/* Direct Launch Actions */}
-          <div className="flex items-center gap-3">
-            <Link
-              href="/simulation"
-              className="px-5 py-2.5 rounded-xl bg-accent text-white text-xs font-semibold hover:opacity-90 transition-all shadow-md shadow-accent/20 flex items-center gap-2"
+          {/* Direct Launch & Sign-In Actions */}
+          <div className="flex items-center gap-2.5">
+            {mounted && isAuthenticated && user ? (
+              <div className="flex items-center gap-2 bg-surface/90 border border-line rounded-xl px-2.5 py-1.5 shadow-2xs">
+                {user.avatar_url || user.picture ? (
+                  <img
+                    src={user.avatar_url || user.picture}
+                    alt={user.full_name || "User"}
+                    className="h-6 w-6 rounded-full border border-line object-cover"
+                  />
+                ) : (
+                  <div className="h-6 w-6 rounded-full bg-accent/15 text-accent font-bold text-xs flex items-center justify-center">
+                    {(user.full_name || user.email || "U").charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="hidden sm:flex flex-col text-left">
+                  <span className="text-[11px] font-semibold text-ink leading-tight truncate max-w-[110px]">
+                    {user.full_name || user.email.split("@")[0]}
+                  </span>
+                  <span className="text-[9.5px] font-mono leading-none">
+                    {hasValidKey ? (
+                      <span className="text-emerald-600 font-bold">BYOK: Unlimited</span>
+                    ) : (
+                      <span className="text-amber-600 font-semibold">BYOK: Ready</span>
+                    )}
+                  </span>
+                </div>
+                <button
+                  onClick={logout}
+                  className="text-muted hover:text-red-500 text-[10.5px] font-mono px-1.5 py-0.5 rounded hover:bg-red-500/10 transition-colors"
+                  title="Sign Out"
+                >
+                  Sign Out
+                </button>
+              </div>
+            ) : mounted ? (
+              <button
+                onClick={() => router.push("/login")}
+                className="px-3.5 py-2 rounded-xl bg-surface hover:bg-raised border border-line text-ink text-xs font-semibold hover:border-accent/40 transition-all shadow-xs flex items-center gap-2 group cursor-pointer"
+                title="Sign in with Google"
+              >
+                <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+                <span>Sign In</span>
+              </button>
+            ) : (
+              <div className="h-8 w-20" />
+            )}
+
+            <button
+              onClick={handleLaunchSwarm}
+              className="px-5 py-2.5 rounded-xl bg-accent text-white text-xs font-semibold hover:opacity-90 transition-all shadow-md shadow-accent/20 flex items-center gap-2 cursor-pointer"
             >
               <span>Launch Swarm</span>
               <ArrowRight className="h-4 w-4" />
-            </Link>
+            </button>
           </div>
         </div>
       </header>
@@ -106,65 +179,50 @@ export default function LandingPage() {
 
           {/* Subtitle */}
           <p className="text-sm sm:text-base text-muted max-w-2xl mx-auto leading-relaxed">
-            Simulate 50+ autonomous AI personas across 3 organizational channels. Extract Knowledge Graphs, forecast consumer churn, and identify critical risk turning points with precision.
+            Simulate 200+ autonomous AI personas across 3 organizational channels. Extract Knowledge Graphs, forecast consumer churn, and identify critical risk turning points with precision.
           </p>
 
           {/* CTAs */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
-            <Link
-              href="/simulation"
-              className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-accent text-white font-bold text-sm hover:opacity-90 transition-all shadow-xl shadow-accent/25 flex items-center justify-center gap-3"
+          <div className="flex items-center justify-center pt-2">
+            <button
+              onClick={handleLaunchSwarm}
+              className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-accent text-white font-bold text-sm hover:opacity-90 transition-all shadow-xl shadow-accent/25 flex items-center justify-center gap-3 cursor-pointer"
             >
               <Play className="h-4 w-4 fill-current" />
-              <span>Start Free 50-Agent Simulation</span>
-            </Link>
-
-            <Link
-              href="/risk"
-              className="w-full sm:w-auto px-7 py-4 rounded-2xl bg-surface border border-line text-ink font-semibold text-sm hover:bg-raised transition-all flex items-center justify-center gap-2 shadow-xs"
-            >
-              <ShieldAlert className="h-4 w-4 text-accent2" />
-              <span>Explore Risk Synthesis</span>
-            </Link>
+              <span>Start 200-Agent Simulation</span>
+            </button>
           </div>
 
           {/* Highlights */}
           <div className="flex flex-wrap items-center justify-center gap-6 pt-4 text-xs font-mono text-muted">
             <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500" /> No credit card required
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" /> Unlimited with BYOK (Gemini / Groq)
             </span>
             <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500" /> 50 Autonomous Personas
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" /> 200 Autonomous Personas
             </span>
             <span className="flex items-center gap-1.5">
               <CheckCircle2 className="h-4 w-4 text-emerald-500" /> Powered by Gemini GraphRAG
             </span>
           </div>
-        </div>
 
-        {/* Live Swarm Interactive Demo Container */}
-        <div id="demo" className="max-w-6xl mx-auto px-6 mt-16">
-          <div className="rounded-3xl border border-line bg-surface p-4 shadow-2xl space-y-3 relative">
-            <div className="flex items-center justify-between px-4 py-2 border-b border-line text-xs font-mono">
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-ink font-bold">LIVE SIMULATION CANVAS PREVIEW</span>
-              </div>
-              <div className="flex items-center gap-4 text-muted">
-                <span>SCENARIO: Enterprise Pricing Restructure</span>
-                <span className="text-accent font-bold">50 AGENTS ONLINE</span>
-              </div>
+          {mounted && !isAuthenticated && (
+            <div className="pt-2 flex justify-center">
+              <button
+                onClick={() => router.push("/login")}
+                className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-surface/90 hover:bg-raised border border-line text-xs font-medium text-ink shadow-2xs hover:border-accent/40 transition-all cursor-pointer group"
+              >
+                <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+                <span>Sign in with Google to save your workspace & simulations</span>
+                <ArrowRight className="h-3 w-3 text-muted group-hover:text-ink group-hover:translate-x-0.5 transition-transform" />
+              </button>
             </div>
-
-            <div className="h-[480px] w-full rounded-2xl overflow-hidden border border-line">
-              <GraphCanvas
-                nodes={graphData.nodes}
-                edges={graphData.edges}
-                title="LOKI ORCHESTRATION DEMO"
-                subtitle="50 Personas · Concentric Tier Topology"
-              />
-            </div>
-          </div>
+          )}
         </div>
       </section>
 
@@ -177,7 +235,7 @@ export default function LandingPage() {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             <div className="space-y-1">
-              <p className="text-3xl sm:text-4xl font-display font-black text-accent">50+</p>
+              <p className="text-3xl sm:text-4xl font-display font-black text-accent">200+</p>
               <p className="text-xs font-mono text-muted uppercase">Personas per Run</p>
             </div>
             <div className="space-y-1">
@@ -239,7 +297,7 @@ export default function LandingPage() {
               <div className="h-12 w-12 rounded-2xl bg-accent/10 text-accent font-mono font-bold text-lg flex items-center justify-center border border-accent/20">
                 03
               </div>
-              <h3 className="font-display text-base font-bold text-ink">50 Swarm Cascade</h3>
+              <h3 className="font-display text-base font-bold text-ink">200 Swarm Cascade</h3>
               <p className="text-xs text-muted leading-relaxed">
                 5-tier autonomous personas negotiate across Executive, Internal Operational, and Public channels.
               </p>
@@ -279,7 +337,7 @@ export default function LandingPage() {
               </div>
               <h3 className="font-display text-lg font-bold text-ink">5-Tier Persona Generator</h3>
               <p className="text-xs text-muted leading-relaxed">
-                Auto-generates 50 distinct personas with risk thresholds, biases, roles, and initial positions ranging from C-suite to media critics.
+                Auto-generates 200 distinct personas with risk thresholds, biases, roles, and initial positions ranging from C-suite to media critics.
               </p>
             </div>
 
@@ -352,13 +410,13 @@ export default function LandingPage() {
           </p>
 
           <div className="pt-2">
-            <Link
-              href="/simulation"
-              className="inline-flex items-center gap-3 px-8 py-4 rounded-2xl bg-accent text-white font-bold text-sm hover:opacity-90 transition-all shadow-xl shadow-accent/25"
+            <button
+              onClick={handleLaunchSwarm}
+              className="inline-flex items-center gap-3 px-8 py-4 rounded-2xl bg-accent text-white font-bold text-sm hover:opacity-90 transition-all shadow-xl shadow-accent/25 cursor-pointer"
             >
               <Play className="h-4 w-4 fill-current" />
               <span>Launch Swarm Workspace Now</span>
-            </Link>
+            </button>
           </div>
         </div>
       </section>
@@ -381,6 +439,9 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      {/* Global Google Auth Modal */}
+      <AuthModal />
     </div>
   );
 }

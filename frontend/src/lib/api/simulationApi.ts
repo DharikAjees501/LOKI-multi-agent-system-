@@ -1,5 +1,6 @@
 import { SimulationState } from "@/types";
 import { keyService } from "./keyService";
+import { authService } from "./authService";
 import { API_BASE_URL } from "./baseUrl";
 
 export interface SimulationControlParams {
@@ -18,7 +19,7 @@ class SimulationApiService {
     activeAgentsCount: 50,
     totalAgentsCount: 50,
     model: "Gemini 3.5 Flash",
-    activeScenarioId: "scen-01",
+    activeScenarioId: "",
     loadedDocument: {
       name: typeof window !== "undefined" ? localStorage.getItem("LOKI_ACTIVE_DOC_NAME") || localStorage.getItem("SWARMLENS_ACTIVE_DOC_NAME") || "No document loaded" : "No document loaded",
       pages: 12,
@@ -43,15 +44,32 @@ class SimulationApiService {
     }
   }
 
-  private getApiKeyHeader(): Record<string, string> {
-    const keysHeader = keyService.getPrimaryOrFallbackKeysHeader();
-    return keysHeader ? { "x-api-key": keysHeader } : {};
+  private getRequestHeaders(): Record<string, string> {
+    const authHeaders = authService.getAuthHeaders();
+    const byokHeaders = keyService.getBYOKHeaders();
+    return {
+      ...authHeaders,
+      ...byokHeaders,
+    };
   }
 
-  async getSimulationState(scenarioId: string = "scen-01"): Promise<SimulationState> {
+  async getSimulationState(scenarioId?: string): Promise<SimulationState> {
+    const targetScenId =
+      scenarioId ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("SWARMLENS_ACTIVE_SCENARIO_ID") ||
+          localStorage.getItem("LOKI_ACTIVE_SCENARIO_ID") ||
+          ""
+        : "");
+
+    if (!targetScenId || targetScenId === "scen-01") {
+      return { ...this.state };
+    }
+
     try {
-      const res = await fetch(`${API_BASE_URL}/scenarios/${scenarioId}/simulation`, {
-        headers: { ...this.getApiKeyHeader() },
+      const res = await fetch(`${API_BASE_URL}/scenarios/${targetScenId}/simulation`, {
+        credentials: "include",
+        headers: { ...this.getRequestHeaders() },
       });
       if (res.ok) {
         const data = await res.json();
@@ -68,28 +86,60 @@ class SimulationApiService {
     return { ...this.state };
   }
 
-  async playSimulation(scenarioId: string = "scen-01"): Promise<SimulationState> {
+  private resolveScenarioId(scenarioId?: string): string {
+    const id =
+      scenarioId ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("SWARMLENS_ACTIVE_SCENARIO_ID") ||
+          localStorage.getItem("LOKI_ACTIVE_SCENARIO_ID") ||
+          ""
+        : "");
+    return id === "scen-01" ? "" : id;
+  }
+
+  async playSimulation(scenarioId?: string): Promise<SimulationState> {
+    const targetScenId = this.resolveScenarioId(scenarioId);
+    if (!targetScenId) {
+      this.state.status = "RUNNING";
+      return { ...this.state };
+    }
     try {
-      const res = await fetch(`${API_BASE_URL}/scenarios/${scenarioId}/simulation/play`, {
+      const res = await fetch(`${API_BASE_URL}/scenarios/${targetScenId}/simulation/play`, {
         method: "POST",
-        headers: { ...this.getApiKeyHeader() },
+        credentials: "include",
+        headers: { ...this.getRequestHeaders() },
       });
+      if (res.status === 403) {
+        const data = await res.json().catch(() => ({}));
+        const msg = data.detail || "API Key required for unlimited simulations.";
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("loki_quota_exceeded", { detail: { message: msg } }));
+        }
+        throw new Error(msg);
+      }
       if (res.ok) {
         const data = await res.json();
         this.state.status = data.status || "RUNNING";
         this.state.currentRound = data.currentRound || this.state.currentRound;
+        authService.fetchCurrentUser().catch(() => {});
       }
-    } catch (err) {
+    } catch (err: any) {
       this.state.status = "RUNNING";
     }
     return { ...this.state };
   }
 
-  async pauseSimulation(scenarioId: string = "scen-01"): Promise<SimulationState> {
+  async pauseSimulation(scenarioId?: string): Promise<SimulationState> {
+    const targetScenId = this.resolveScenarioId(scenarioId);
+    this.state.status = "PAUSED";
+    if (!targetScenId) {
+      return { ...this.state };
+    }
     try {
-      const res = await fetch(`${API_BASE_URL}/scenarios/${scenarioId}/simulation/pause`, {
+      const res = await fetch(`${API_BASE_URL}/scenarios/${targetScenId}/simulation/pause`, {
         method: "POST",
-        headers: { ...this.getApiKeyHeader() },
+        credentials: "include",
+        headers: { ...this.getRequestHeaders() },
       });
       if (res.ok) {
         const data = await res.json();
@@ -101,16 +151,33 @@ class SimulationApiService {
     return { ...this.state };
   }
 
-  async stepSimulation(scenarioId: string = "scen-01"): Promise<SimulationState> {
+  async stepSimulation(scenarioId?: string): Promise<SimulationState> {
+    const targetScenId = this.resolveScenarioId(scenarioId);
+    if (!targetScenId) {
+      if (this.state.currentRound < this.state.totalRounds) {
+        this.state.currentRound += 1;
+      }
+      return { ...this.state };
+    }
     try {
-      const res = await fetch(`${API_BASE_URL}/scenarios/${scenarioId}/simulation/step`, {
+      const res = await fetch(`${API_BASE_URL}/scenarios/${targetScenId}/simulation/step`, {
         method: "POST",
-        headers: { ...this.getApiKeyHeader() },
+        credentials: "include",
+        headers: { ...this.getRequestHeaders() },
       });
+      if (res.status === 403) {
+        const data = await res.json().catch(() => ({}));
+        const msg = data.detail || "API Key required for unlimited simulations.";
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("loki_quota_exceeded", { detail: { message: msg } }));
+        }
+        throw new Error(msg);
+      }
       if (res.ok) {
         const data = await res.json();
-        this.state.currentRound = data.currentRound;
-        this.state.status = data.status;
+        this.state.status = data.status || "RUNNING";
+        this.state.currentRound = data.currentRound || (this.state.currentRound + 1);
+        authService.fetchCurrentUser().catch(() => {});
       }
     } catch (err) {
       if (this.state.currentRound < this.state.totalRounds) {
@@ -120,14 +187,18 @@ class SimulationApiService {
     return { ...this.state };
   }
 
-  async resetSimulation(scenarioId: string = "scen-01"): Promise<SimulationState> {
-    try {
-      await fetch(`${API_BASE_URL}/scenarios/${scenarioId}/simulation/reset`, {
-        method: "POST",
-        headers: { ...this.getApiKeyHeader() },
-      });
-    } catch (err) {
-      // ignore
+  async resetSimulation(scenarioId?: string): Promise<SimulationState> {
+    const targetScenId = this.resolveScenarioId(scenarioId);
+    if (targetScenId) {
+      try {
+        await fetch(`${API_BASE_URL}/scenarios/${targetScenId}/simulation/reset`, {
+          method: "POST",
+          credentials: "include",
+          headers: { ...this.getRequestHeaders() },
+        });
+      } catch (err) {
+        // ignore
+      }
     }
     this.state.currentRound = 0;
     this.state.status = "IDLE";
@@ -142,22 +213,18 @@ class SimulationApiService {
   }
 
   async getFeedEvents(scenarioId?: string): Promise<any[]> {
-    const activeId =
-      scenarioId ||
-      (typeof window !== "undefined"
-        ? localStorage.getItem("active_scenario_id") ||
-          localStorage.getItem("SWARMLENS_ACTIVE_SCENARIO_ID") ||
-          localStorage.getItem("LOKI_ACTIVE_SCENARIO_ID") ||
-          "scen-01"
-        : "scen-01");
+    const activeId = this.resolveScenarioId(scenarioId);
+    if (!activeId) return [];
     try {
       let res = await fetch(`${API_BASE_URL}/simulation/feed?scenario_id=${activeId}`, {
-        headers: { ...this.getApiKeyHeader() },
+        credentials: "include",
+        headers: { ...this.getRequestHeaders() },
       }).catch(() => null);
 
       if (!res || !res.ok) {
         res = await fetch(`${API_BASE_URL}/scenarios/${activeId}/events`, {
-          headers: { ...this.getApiKeyHeader() },
+          credentials: "include",
+          headers: { ...this.getRequestHeaders() },
         }).catch(() => null);
       }
 

@@ -2,7 +2,7 @@ import os
 import io
 import uuid
 import datetime
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from app.models.document import DocumentChunkModel, DocumentUploadResponse
 from app.storage.database import get_db_connection
 from app.core.logging import logger
@@ -65,7 +65,7 @@ class DocumentService:
 
         return text
 
-    def process_and_store_document(self, content: bytes, filename: str) -> DocumentUploadResponse:
+    def process_and_store_document(self, content: bytes, filename: str, user_id: Optional[str] = None) -> DocumentUploadResponse:
         doc_id = f"doc-{uuid.uuid4().hex[:8]}"
         created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         ext = filename.split(".")[-1].upper() if "." in filename else "TXT"
@@ -77,10 +77,10 @@ class DocumentService:
         try:
             cursor = conn.cursor()
 
-            # Insert Document record
+            # Insert Document record with user_id for workspace isolation
             cursor.execute(
-                "INSERT INTO documents (id, filename, file_type, size_bytes, chunk_count, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (doc_id, filename, ext, len(content), len(raw_chunks), "READY", created_at)
+                "INSERT INTO documents (id, filename, file_type, size_bytes, chunk_count, status, created_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (doc_id, filename, ext, len(content), len(raw_chunks), "READY", created_at, user_id)
             )
 
             chunk_models: List[DocumentChunkModel] = []

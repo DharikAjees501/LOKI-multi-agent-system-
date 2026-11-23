@@ -1,5 +1,6 @@
 import { Agent } from "@/types";
 import { keyService } from "./keyService";
+import { authService } from "./authService";
 import { API_BASE_URL } from "./baseUrl";
 
 export interface AgentChatMessage {
@@ -10,16 +11,17 @@ export interface AgentChatMessage {
 }
 
 class AgentApiService {
-  private getApiKeyHeaders(): Record<string, string> {
+  private getHeaders(): Record<string, string> {
     const keys = keyService.getKeys();
     const primaryKey = keys.find((k) => k.isPrimary) || keys[0];
     const keysHeader = keyService.getPrimaryOrFallbackKeysHeader();
     const activeProvider = primaryKey?.provider || "gemini";
 
-    const headers: Record<string, string> = {};
-    if (primaryKey?.key) {
-      headers["Authorization"] = `Bearer ${primaryKey.key}`;
-    }
+    const headers: Record<string, string> = {
+      ...authService.getAuthHeaders(),
+      ...keyService.getBYOKHeaders(),
+    };
+
     if (keysHeader) {
       headers["x-api-key"] = keysHeader;
     }
@@ -27,12 +29,23 @@ class AgentApiService {
     return headers;
   }
 
-  async getAllAgents(scenarioId: string = "scen-01"): Promise<Agent[]> {
+  async getAllAgents(scenarioId?: string): Promise<Agent[]> {
+    const targetScenId =
+      scenarioId ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("SWARMLENS_ACTIVE_SCENARIO_ID") ||
+          localStorage.getItem("LOKI_ACTIVE_SCENARIO_ID") ||
+          ""
+        : "");
+
+    if (!targetScenId || targetScenId === "scen-01") {
+      return [];
+    }
+
     try {
-      const res = await fetch(`${API_BASE_URL}/scenarios/${scenarioId}/agents`, {
-        headers: {
-          ...this.getApiKeyHeaders(),
-        },
+      const res = await fetch(`${API_BASE_URL}/scenarios/${targetScenId}/agents`, {
+        credentials: "include",
+        headers: this.getHeaders(),
       });
       if (res.ok) {
         return await res.json();
@@ -40,49 +53,14 @@ class AgentApiService {
     } catch {
       // Quiet fallback when backend API is offline
     }
-    return Array.from({ length: 200 }, (_, i) => {
-      const num = i + 1;
-      const tier = (i < 2 ? 0 : i < 20 ? 1 : i < 45 ? 2 : i < 100 ? 3 : 4) as Agent["tier"];
-      const tierName = (
-        tier === 0
-          ? "TIER 0 · ORCHESTRATION & SYSTEM"
-          : tier === 1
-          ? "TIER 1 · BOARDROOM & EXECUTIVE LEADERSHIP"
-          : tier === 2
-          ? "TIER 2 · INSTITUTIONAL & REGULATORY WATCHDOGS"
-          : tier === 3
-          ? "TIER 3 · MEDIA, AMPLIFIERS & PUBLIC CRITICS"
-          : "TIER 4 · BROAD MARKET & CONSUMER POPULATION"
-      ) as Agent["tierName"];
-
-      return {
-        id: `agent-scen-01-${num}`,
-        numberId: num,
-        name: `Agent A${String(num).padStart(2, "0")}`,
-        role: `Stakeholder Role ${num}`,
-        tier,
-        tierName,
-        bias: "Operational Governance",
-        riskThreshold: 30,
-        currentState: "ACTIVE" as Agent["currentState"],
-        currentPosition: "Auditing strategy parameters.",
-        sentiment: "NEUTRAL" as Agent["sentiment"],
-        currentChannel: (tier <= 1 ? "BOARDROOM" : tier <= 3 ? "MEDIA" : "PUBLIC") as Agent["currentChannel"],
-        confidence: 85,
-        metrics: {
-          postsCount: 12,
-          influenceScore: 78,
-          agreementRate: 65,
-        },
-      };
-    });
+    return [];
   }
 
-  async getAgentsForScenario(scenarioId: string = "scen-01"): Promise<Agent[]> {
+  async getAgentsForScenario(scenarioId?: string): Promise<Agent[]> {
     return this.getAllAgents(scenarioId);
   }
 
-  async getAgentById(id: string, scenarioId: string = "scen-01"): Promise<Agent | undefined> {
+  async getAgentById(id: string, scenarioId?: string): Promise<Agent | undefined> {
     const agents = await this.getAllAgents(scenarioId);
     const nums = id.match(/\d+/g);
     const targetNum = nums && nums.length > 0 ? Number(nums[nums.length - 1]) : null;
@@ -102,9 +80,10 @@ class AgentApiService {
 
     const res = await fetch(`${API_BASE_URL}/agents/${agentId}/chat`, {
       method: "POST",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        ...this.getApiKeyHeaders(),
+        ...this.getHeaders(),
       },
       body: JSON.stringify({
         agent_id: agentId,

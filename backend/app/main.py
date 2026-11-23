@@ -1,27 +1,44 @@
 import asyncio
-import json
 import datetime
-from typing import Dict, List
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+import json
+from contextlib import asynccontextmanager
 
+from app.api import agents, auth, documents, graph, keys, reports, scenarios, simulation
+from app.api.keys import ConfigVerifyRequest, verify_keys_config_route
 from app.core.config import settings
-from app.core.logging import setup_logging, logger
+from app.core.logging import logger, setup_logging
 from app.core.rate_limiter import RateLimitMiddleware
 from app.core.telemetry import telemetry
-from app.api import documents, scenarios, graph, agents, simulation, reports, keys, auth
 from app.engine.swarm_orchestrator import orchestrator_engine
-from app.storage.database import log_audit_event
+from app.storage.database import ensure_db_initialized
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse, RedirectResponse
 
 setup_logging()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        loop = asyncio.get_event_loop()
+        loop.run_in_executor(None, ensure_db_initialized)
+    except Exception as e:
+        logger.warning(f"Startup background init notice: {e}")
+    yield
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version="5.0.0-hardened",
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    docs_url=f"{settings.API_V1_STR}/docs"
+    docs_url=f"{settings.API_V1_STR}/docs",
+    lifespan=lifespan
 )
 
 # Production Compression Middleware
@@ -30,14 +47,46 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 # Sliding Window Rate Limiting Middleware
 app.add_middleware(RateLimitMiddleware)
 
-# CORS Setup
+# CORS Setup - Strict Whitelist for HttpOnly Cookie Authentication
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=[
+        "Content-Type",
+        "X-Gemini-Key",
+        "X-Groq-Key",
+        "X-OpenAI-Key",
+        "X-Anthropic-Key",
+        "X-OpenRouter-Key",
+        "X-Requested-With",
+        "Authorization",
+        "Accept",
+        "Origin",
+    ],
 )
+
+# CSRF Origin Verification Middleware for State-Changing Requests
+@app.middleware("http")
+async def csrf_origin_middleware(request: Request, call_next):
+    if request.method in ["POST", "PUT", "DELETE", "PATCH"]:
+        origin = request.headers.get("origin") or request.headers.get("Origin")
+        if origin:
+            allowed = set(settings.cors_origins_list + [
+                "http://localhost:3000",
+                "http://127.0.0.1:3000",
+                "http://localhost:8000",
+                "http://127.0.0.1:8000",
+            ])
+            norm = origin.rstrip("/")
+            if norm not in allowed and not any(norm.startswith(a.rstrip("/")) for a in allowed):
+                logger.warning(f"[CSRF Protection] Untrusted origin blocked: {origin} on {request.url.path}")
+                return JSONResponse(
+                    status_code=403,
+                    content={"error": True, "detail": "CSRF origin verification failed."}
+                )
+    return await call_next(request)
 
 # Exception Handlers
 @app.exception_handler(HTTPException)
@@ -51,9 +100,10 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Global unhandled exception on {request.url.path}: {exc}", exc_info=True)
     telemetry.record_llm_call(is_error=True)
+    # Generic safe error message to prevent leaking tracebacks or env variables
     return JSONResponse(
         status_code=500,
-        content={"error": True, "detail": "An internal server error occurred.", "path": str(request.url.path)}
+        content={"error": True, "detail": "Internal server error", "path": str(request.url.path)}
     )
 
 # Include API Routers with prefix (/api)
@@ -79,19 +129,9 @@ app.include_router(auth.router)
 @app.post("/config/verify-key")
 @app.post(f"{settings.API_V1_STR}/config/verify-key")
 async def verify_key_config_alias(request: Request):
-    from app.api.keys import verify_keys_config_route, ConfigVerifyRequest
     body = await request.json()
     req = ConfigVerifyRequest(**body)
     return await verify_keys_config_route(req)
-
-@app.on_event("startup")
-async def startup_event():
-    try:
-        from app.storage.database import ensure_db_initialized
-        loop = asyncio.get_event_loop()
-        loop.run_in_executor(None, ensure_db_initialized)
-    except Exception as e:
-        logger.warning(f"Startup background init notice: {e}")
 
 @app.get("/")
 async def root():
@@ -101,6 +141,14 @@ async def root():
         "status": "OPERATIONAL",
         "docs": f"{settings.API_V1_STR}/docs"
     }
+
+@app.get("/docs", include_in_schema=False)
+async def root_docs_redirect():
+    return RedirectResponse(url=f"{settings.API_V1_STR}/docs")
+
+@app.get("/openapi.json", include_in_schema=False)
+async def root_openapi_redirect():
+    return RedirectResponse(url=f"{settings.API_V1_STR}/openapi.json")
 
 @app.get("/health")
 @app.get(f"{settings.API_V1_STR}/health")
@@ -136,7 +184,7 @@ async def list_models():
 # Realtime WebSocket Manager
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: Dict[str, List[WebSocket]] = {}
+        self.active_connections: dict[str, list[WebSocket]] = {}
 
     async def connect(self, scenario_id: str, websocket: WebSocket):
         await websocket.accept()
@@ -146,12 +194,13 @@ class ConnectionManager:
         logger.info(f"WebSocket client connected to scenario {scenario_id}")
 
     def disconnect(self, scenario_id: str, websocket: WebSocket):
-        if scenario_id in self.active_connections:
-            if websocket in self.active_connections[scenario_id]:
-                self.active_connections[scenario_id].remove(websocket)
+        if scenario_id in self.active_connections and websocket in self.active_connections[scenario_id]:
+            self.active_connections[scenario_id].remove(websocket)
 
     async def broadcast(self, message: dict):
-        scenario_id = message.get("scenario_id", "scen-01")
+        scenario_id = message.get("scenario_id", "")
+        if not scenario_id or scenario_id == "scen-01":
+            return
         if scenario_id in self.active_connections:
             for connection in list(self.active_connections[scenario_id]):
                 try:

@@ -1,4 +1,6 @@
 import { API_BASE_URL } from "./baseUrl";
+import { authService } from "./authService";
+import { keyService } from "./keyService";
 
 const IS_MOCK_MODE = process.env.NEXT_PUBLIC_MOCK_MODE === "true";
 
@@ -13,6 +15,13 @@ export interface DocumentUploadResponse {
 }
 
 class DocumentApiService {
+  private getHeaders(): Record<string, string> {
+    return {
+      ...authService.getAuthHeaders(),
+      ...keyService.getBYOKHeaders(),
+    };
+  }
+
   async uploadDocument(
     file: File,
     scenarioTitle?: string,
@@ -30,6 +39,8 @@ class DocumentApiService {
 
         const res = await fetch(`${API_BASE_URL}/documents/upload`, {
           method: "POST",
+          credentials: "include",
+          headers: this.getHeaders(),
           body: formData,
           signal: controller.signal,
         });
@@ -49,7 +60,7 @@ class DocumentApiService {
           };
         }
       } catch (err) {
-        console.warn("[DocumentAPI] Real backend upload timed out or failed, proceeding with fast local scenario sync.", err);
+        console.warn("[DocumentAPI] Real backend upload timed out or failed, proceeding with local scenario sync.", err);
       }
     }
 
@@ -69,6 +80,8 @@ class DocumentApiService {
       try {
         const res = await fetch(`${API_BASE_URL}/scenarios/${scenarioId}/extract?document_id=${documentId}`, {
           method: "POST",
+          credentials: "include",
+          headers: this.getHeaders(),
         });
         if (res.ok) {
           const data = await res.json();
@@ -86,6 +99,8 @@ class DocumentApiService {
     try {
       const res = await fetch(`${API_BASE_URL}/documents/${encodeURIComponent(documentId)}`, {
         method: "DELETE",
+        credentials: "include",
+        headers: this.getHeaders(),
       });
       return res.ok;
     } catch (err) {

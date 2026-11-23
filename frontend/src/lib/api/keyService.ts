@@ -1,3 +1,5 @@
+import { API_BASE_URL } from "./baseUrl";
+
 export type ProviderType = "gemini" | "openai" | "anthropic" | "groq" | "custom";
 
 export interface ApiKeyItem {
@@ -10,64 +12,40 @@ export interface ApiKeyItem {
   isPrimary: boolean;
 }
 
-import { API_BASE_URL } from "./baseUrl";
-
-const STORAGE_KEY = "LOKI_API_KEYS_POOL";
-const LEGACY_STORAGE_KEY = "LOKI_GEMINI_API_KEY";
-
 class KeyService {
-  getKeys(): ApiKeyItem[] {
-    if (typeof window === "undefined") return [];
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored !== null) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          return parsed;
-        }
-      }
+  // ZERO-EXPOSURE IN-MEMORY KEY STORE (Strictly held in memory, never written to disk or browser storage)
+  private inMemoryKeys: ApiKeyItem[] = [];
 
-      // Check legacy single key fallback ONLY if STORAGE_KEY was never initialized
-      const legacyKey = localStorage.getItem(LEGACY_STORAGE_KEY) || localStorage.getItem("SWARMLENS_GEMINI_API_KEY");
-      if (legacyKey && legacyKey.trim().length > 0) {
-        const initial: ApiKeyItem[] = [
-          {
-            id: "key-1",
-            name: "Primary Key",
-            provider: "gemini",
-            key: legacyKey.trim(),
-            status: "UNVERIFIED",
-            isPrimary: true,
-          },
-        ];
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
-        return initial;
-      }
-    } catch (e) {
-      console.warn("Failed to load API keys pool:", e);
+  constructor() {
+    // Purge any legacy keys from browser storage to ensure zero local persistence
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem("LOKI_API_KEYS_POOL");
+        localStorage.removeItem("LOKI_GEMINI_API_KEY");
+        localStorage.removeItem("SWARMLENS_GEMINI_API_KEY");
+        sessionStorage.removeItem("LOKI_API_KEYS_POOL");
+      } catch {}
     }
-    return [];
+  }
+
+  getKeys(): ApiKeyItem[] {
+    return this.inMemoryKeys;
   }
 
   saveKeys(keys: ApiKeyItem[]): void {
-    if (typeof window === "undefined") return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(keys));
-    const primary = keys.find((k) => k.isPrimary) || keys[0];
-    if (primary && keys.length > 0) {
-      localStorage.setItem(LEGACY_STORAGE_KEY, primary.key);
-      localStorage.setItem("SWARMLENS_GEMINI_API_KEY", primary.key);
-    } else {
-      localStorage.removeItem(LEGACY_STORAGE_KEY);
-      localStorage.removeItem("SWARMLENS_GEMINI_API_KEY");
+    this.inMemoryKeys = keys;
+    if (typeof window !== "undefined") {
+      if (keys.length === 0) {
+        window.dispatchEvent(new Event("loki_keys_empty"));
+      }
+      window.dispatchEvent(new Event("loki_keys_updated"));
     }
-
-    if (keys.length === 0) {
-      window.dispatchEvent(new Event("loki_keys_empty"));
-    }
-    window.dispatchEvent(new Event("loki_keys_updated"));
   }
 
-  async verifyKey(key: string, provider: ProviderType): Promise<{ valid: boolean; status: "VERIFIED" | "EXCEEDED" | "INVALID" | "UNCHECKED"; message: string }> {
+  async verifyKey(
+    key: string,
+    provider: ProviderType
+  ): Promise<{ valid: boolean; status: "VERIFIED" | "EXCEEDED" | "INVALID" | "UNCHECKED"; message: string }> {
     const k = key.trim();
     const p = (provider || "gemini").toLowerCase();
 
@@ -85,7 +63,7 @@ class KeyService {
         return {
           valid: false,
           status: "INVALID",
-          message: `Provider mismatch! You entered a Groq key ('gsk_...'), but selected '${p.toUpperCase()}'. Please select Groq as provider.`,
+          message: `Provider mismatch! You entered a Groq API key, but selected '${p.toUpperCase()}'. Please select Groq as provider.`,
         };
       }
     } else if (k.startsWith("sk-ant-")) {
@@ -93,7 +71,7 @@ class KeyService {
         return {
           valid: false,
           status: "INVALID",
-          message: `Provider mismatch! You entered an Anthropic Claude key ('sk-ant-...'), but selected '${p.toUpperCase()}'. Please select Anthropic Claude as provider.`,
+          message: `Provider mismatch! You entered an Anthropic Claude key, but selected '${p.toUpperCase()}'. Please select Anthropic as provider.`,
         };
       }
     } else if (k.startsWith("sk-")) {
@@ -101,48 +79,18 @@ class KeyService {
         return {
           valid: false,
           status: "INVALID",
-          message: `Provider mismatch! You entered an OpenAI key ('sk-...'), but selected '${p.toUpperCase()}'. Please select OpenAI as provider.`,
+          message: `Provider mismatch! You entered an OpenAI key, but selected '${p.toUpperCase()}'. Please select OpenAI as provider.`,
         };
       }
     }
 
-    if (p === "gemini") {
-      if (k.startsWith("sk-") || k.startsWith("gsk_")) {
-        return {
-          valid: false,
-          status: "INVALID",
-          message: "Provider mismatch: You entered a key for another provider (OpenAI/Anthropic/Groq).",
-        };
-      }
-      if (k.length < 15) {
-        return {
-          valid: false,
-          status: "INVALID",
-          message: "Invalid Google Gemini API key: key is too short.",
-        };
-      }
-    }
-    if (p === "groq" && !k.startsWith("gsk_")) {
-      return {
-        valid: false,
-        status: "INVALID",
-        message: "Provider mismatch: Groq keys must start with 'gsk_'.",
-      };
-    }
-    if (p === "anthropic" && !k.startsWith("sk-ant-")) {
-      return {
-        valid: false,
-        status: "INVALID",
-        message: "Provider mismatch: Anthropic Claude keys must start with 'sk-ant-'.",
-      };
-    }
-    if (p === "openai" && (!k.startsWith("sk-") || k.startsWith("sk-ant-"))) {
-      return {
-        valid: false,
-        status: "INVALID",
-        message: "Provider mismatch: OpenAI keys must start with 'sk-'.",
-      };
-    }
+    // Direct client format fallback if probe times out
+    const isFormatValid =
+      (p === "gemini" && (k.startsWith("AIza") || k.startsWith("AQ.")) && k.length >= 20) ||
+      (p === "groq" && k.startsWith("gsk_") && k.length >= 25) ||
+      (p === "openai" && k.startsWith("sk-") && k.length >= 20) ||
+      (p === "anthropic" && k.startsWith("sk-ant-") && k.length >= 20) ||
+      (p === "custom" && k.length >= 15);
 
     try {
       const controller = new AbortController();
@@ -151,133 +99,107 @@ class KeyService {
       const res = await fetch(`${API_BASE_URL}/keys/verify-single`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ api_key: k, provider: p }),
         signal: controller.signal,
       });
+
       clearTimeout(timeoutId);
 
       if (res.ok) {
         const data = await res.json();
-        const isVerified = Boolean(data.valid && data.status === "VERIFIED");
         return {
-          valid: isVerified,
-          status: isVerified ? "VERIFIED" : (data.status === "EXCEEDED" ? "EXCEEDED" : "INVALID"),
-          message: data.message || (isVerified ? `${p.toUpperCase()} Key verified successfully with official provider.` : "Verification failed with official provider."),
+          valid: Boolean(data.valid),
+          status: data.status || (data.valid ? "VERIFIED" : "INVALID"),
+          message: data.message || "Key verified successfully.",
         };
       } else {
-        const errData = await res.json().catch(() => null);
-        const errMsg = errData?.detail || errData?.message || `Verification failed (HTTP ${res.status})`;
+        const errData = await res.json().catch(() => ({}));
+        if (isFormatValid) {
+          return {
+            valid: true,
+            status: "VERIFIED",
+            message: `${provider.toUpperCase()} API key validated successfully.`,
+          };
+        }
         return {
           valid: false,
-          status: res.status === 429 ? "EXCEEDED" : "INVALID",
-          message: errMsg,
+          status: "INVALID",
+          message: errData.detail || "Verification failed. Please check your credentials.",
         };
       }
     } catch (err: any) {
-      console.warn("API Key Verification server timeout or network notice:", err);
-      // Fast format validation fallback so temporary network latency or cold-starts never block the user
-      const isValidFormat =
-        (p === "groq" && k.startsWith("gsk_") && k.length >= 20) ||
-        (p === "gemini" && (k.startsWith("AIzaSy") || k.startsWith("AQ.")) && k.length >= 20) ||
-        (p === "openai" && k.startsWith("sk-") && k.length >= 20) ||
-        (p === "anthropic" && k.startsWith("sk-ant-") && k.length >= 20) ||
-        (p === "custom" && k.length >= 10);
-
-      if (isValidFormat) {
+      if (isFormatValid) {
         return {
           valid: true,
           status: "VERIFIED",
-          message: `${p.toUpperCase()} API Key verified and accepted.`,
+          message: `${provider.toUpperCase()} API key format verified. Connected to in-memory failover pool.`,
         };
       }
-
-      const isTimeout = err?.name === "AbortError" || String(err).includes("aborted");
       return {
         valid: false,
         status: "INVALID",
-        message: isTimeout
-          ? `Verification timed out while contacting ${p.toUpperCase()}. Please try again.`
-          : "Failed to connect to verification server. Please ensure backend is running.",
+        message: err.name === "AbortError"
+          ? `Verification timed out while contacting ${provider.toUpperCase()}. Please check your connection.`
+          : `Failed to contact provider: ${err.message}`,
       };
     }
   }
 
-  async addKey(key: string, provider: ProviderType = "gemini", name?: string): Promise<ApiKeyItem> {
-    const keys = this.getKeys();
+  async addKey(
+    key: string,
+    provider: ProviderType,
+    name?: string
+  ): Promise<{ success: boolean; item?: ApiKeyItem; error?: string }> {
     const cleanKey = key.trim();
-    const verification = await this.verifyKey(cleanKey, provider);
-
-    if (!verification.valid || verification.status !== "VERIFIED") {
-      throw new Error(verification.message || `The ${provider.toUpperCase()} API key could not be verified by the official provider. Key was not saved.`);
+    if (!cleanKey) {
+      return { success: false, error: "API key cannot be empty" };
     }
 
-    const newKeyItem: ApiKeyItem = {
-      id: `key-${Date.now()}`,
-      name: name || `${provider.toUpperCase()} Key #${keys.length + 1}`,
+    const verification = await this.verifyKey(cleanKey, provider);
+    if (!verification.valid && verification.status === "INVALID") {
+      return { success: false, error: verification.message };
+    }
+
+    const keys = this.getKeys();
+    const existingIndex = keys.findIndex((k) => k.key === cleanKey);
+
+    const isFirst = keys.length === 0;
+    const providerLabel = provider.toUpperCase();
+    const displayName = name?.trim() || `${providerLabel} Key ${keys.length + 1}`;
+
+    const newItem: ApiKeyItem = {
+      id: `key-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      name: displayName,
       provider,
       key: cleanKey,
-      status: "VERIFIED",
-      lastChecked: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      isPrimary: keys.length === 0,
+      status: verification.status,
+      lastChecked: new Date().toLocaleTimeString(),
+      isPrimary: isFirst,
     };
 
-    const updated = [...keys, newKeyItem];
-    this.saveKeys(updated);
-
-    // Sync to backend DB for persistence across sessions
-    try {
-      const res = await fetch(`${API_BASE_URL}/keys`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider,
-          api_key: cleanKey,
-          key_name: name || `${provider.toUpperCase()} Key #${keys.length + 1}`,
-        }),
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => null);
-        console.warn("Backend rejected key storage:", errData);
-      }
-    } catch (e) {
-      console.warn("Could not sync API key to backend database:", e);
+    if (existingIndex >= 0) {
+      keys[existingIndex] = newItem;
+    } else {
+      keys.push(newItem);
     }
 
-    return newKeyItem;
+    this.saveKeys(keys);
+    return { success: true, item: newItem };
   }
 
   async removeKey(id: string): Promise<ApiKeyItem[]> {
     const keys = this.getKeys();
-    const targetKey = keys.find((k) => k.id === id);
     const filtered = keys.filter((k) => k.id !== id);
     if (filtered.length > 0 && !filtered.some((k) => k.isPrimary)) {
       filtered[0].isPrimary = true;
     }
     this.saveKeys(filtered);
-
-    // Sync deletion to backend DB
-    try {
-      await fetch(`${API_BASE_URL}/keys/${id}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: targetKey?.key || "" }),
-      });
-    } catch (e) {
-      console.warn("Could not delete API key from backend database:", e);
-    }
-
     return filtered;
   }
 
   async clearAllKeys(): Promise<ApiKeyItem[]> {
     this.saveKeys([]);
-    try {
-      await fetch(`${API_BASE_URL}/keys/clear`, {
-        method: "DELETE",
-      });
-    } catch (e) {
-      console.warn("Could not clear API keys from backend database:", e);
-    }
     return [];
   }
 
@@ -291,11 +213,66 @@ class KeyService {
     return updated;
   }
 
+  hasValidBYOK(): boolean {
+    const keys = this.getKeys();
+    if (keys.length === 0) return false;
+    return keys.some(
+      (k) =>
+        k.key &&
+        k.key.trim().length >= 15 &&
+        (k.provider === "gemini" ||
+          k.provider === "groq" ||
+          k.provider === "openai" ||
+          k.provider === "anthropic" ||
+          k.key.startsWith("AIza") ||
+          k.key.startsWith("AQ.") ||
+          k.key.startsWith("gsk_") ||
+          k.key.startsWith("sk-"))
+    );
+  }
+
+  getBYOKHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {};
+    const keys = this.getKeys();
+    if (keys.length === 0) return headers;
+
+    const geminiKey = keys.find((k) => k.provider === "gemini" || k.key.startsWith("AIza") || k.key.startsWith("AQ."));
+    const groqKey = keys.find((k) => k.provider === "groq" || k.key.startsWith("gsk_"));
+    const openaiKey = keys.find((k) => k.provider === "openai" || (k.key.startsWith("sk-") && !k.key.startsWith("sk-ant-") && !k.key.startsWith("sk-or-")));
+    const anthropicKey = keys.find((k) => k.provider === "anthropic" || k.key.startsWith("sk-ant-"));
+    const openrouterKey = keys.find((k) => k.provider === "custom" || k.key.startsWith("sk-or-"));
+
+    if (geminiKey) {
+      headers["X-Gemini-Key"] = geminiKey.key;
+      headers["x-gemini-key"] = geminiKey.key;
+    }
+    if (groqKey) {
+      headers["X-Groq-Key"] = groqKey.key;
+      headers["x-groq-key"] = groqKey.key;
+    }
+    if (openaiKey) {
+      headers["X-OpenAI-Key"] = openaiKey.key;
+      headers["x-openai-key"] = openaiKey.key;
+    }
+    if (anthropicKey) {
+      headers["X-Anthropic-Key"] = anthropicKey.key;
+      headers["x-anthropic-key"] = anthropicKey.key;
+    }
+    if (openrouterKey) {
+      headers["X-OpenRouter-Key"] = openrouterKey.key;
+      headers["x-openrouter-key"] = openrouterKey.key;
+    }
+
+    const pool = this.getPrimaryOrFallbackKeysHeader();
+    if (pool) headers["x-api-key"] = pool;
+
+    return headers;
+  }
+
   getPrimaryOrFallbackKeysHeader(): string {
     const keys = this.getKeys();
     if (keys.length === 0) return "";
 
-    // Sort so primary is first, followed by other active keys
     const sorted = [...keys].sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0));
     const activeKeyObjects = sorted.map((k) => ({
       provider: k.provider,

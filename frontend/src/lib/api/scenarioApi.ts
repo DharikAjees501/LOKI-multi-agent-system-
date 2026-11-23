@@ -1,7 +1,16 @@
 import { Scenario } from "@/types";
 import { API_BASE_URL } from "./baseUrl";
+import { authService } from "./authService";
+import { keyService } from "./keyService";
 
 class ScenarioApiService {
+  private getHeaders(): Record<string, string> {
+    return {
+      ...authService.getAuthHeaders(),
+      ...keyService.getBYOKHeaders(),
+    };
+  }
+
   async getScenarios(): Promise<Scenario[]> {
     const urls = [
       `${API_BASE_URL}/scenarios`,
@@ -10,7 +19,11 @@ class ScenarioApiService {
     ];
     for (const url of Array.from(new Set(urls))) {
       try {
-        const res = await fetch(url, { cache: "no-store" });
+        const res = await fetch(url, {
+          cache: "no-store",
+          credentials: "include",
+          headers: this.getHeaders(),
+        });
         if (res.ok) {
           const data = await res.json();
           return data.map((item: any) => ({
@@ -26,7 +39,7 @@ class ScenarioApiService {
           }));
         }
       } catch (err) {
-        // try fallback
+        // quiet fallback
       }
     }
     return [];
@@ -36,7 +49,11 @@ class ScenarioApiService {
     try {
       const res = await fetch(`${API_BASE_URL}/scenarios`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...this.getHeaders(),
+        },
         body: JSON.stringify({
           name: payload.name,
           description: payload.description,
@@ -76,12 +93,14 @@ class ScenarioApiService {
       try {
         const res = await fetch(url, {
           method: "DELETE",
+          credentials: "include",
+          headers: this.getHeaders(),
         });
         if (res.ok) {
           return true;
         }
       } catch (err) {
-        // Continue to fallback candidate
+        // Continue to next candidate
       }
     }
     return true;
@@ -92,7 +111,11 @@ class ScenarioApiService {
       const url = documentId
         ? `${API_BASE_URL}/scenarios/${id}/extract?document_id=${encodeURIComponent(documentId)}`
         : `${API_BASE_URL}/scenarios/${id}/extract`;
-      const res = await fetch(url, { method: "POST" });
+      const res = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: this.getHeaders(),
+      });
       if (res.ok) {
         return await res.json();
       }
@@ -106,7 +129,11 @@ class ScenarioApiService {
     try {
       const res = await fetch(`${API_BASE_URL}/scenarios/${id}/run-baseline`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...this.getHeaders(),
+        },
         body: JSON.stringify({
           goal_prompt: payload?.goal_prompt || "Evaluate baseline strategy operational impact",
           is_what_if: false,
@@ -125,7 +152,11 @@ class ScenarioApiService {
     try {
       const res = await fetch(`${API_BASE_URL}/scenarios/${id}/run-what-if`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...this.getHeaders(),
+        },
         body: JSON.stringify({
           goal_prompt: payload.goal_prompt,
           shock_event: payload.shock_event,
@@ -145,7 +176,11 @@ class ScenarioApiService {
     try {
       const res = await fetch(`${API_BASE_URL}/scenarios/create-and-run`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...this.getHeaders(),
+        },
         body: JSON.stringify({
           name: payload.name,
           description: payload.description || "Evaluate strategic risk and stakeholder alignment",
@@ -276,7 +311,7 @@ export async function deleteActiveScenarioAndDoc(): Promise<boolean> {
       ];
       for (const dUrl of Array.from(new Set(docUrls))) {
         try {
-          const res = await fetch(dUrl, { method: "DELETE" });
+          const res = await fetch(dUrl, { method: "DELETE", credentials: "include" });
           if (res.ok) break;
         } catch (_) {}
       }
@@ -356,4 +391,3 @@ export async function autoInitializeActiveScenario(): Promise<Scenario | null> {
 }
 
 export const scenarioApi = new ScenarioApiService();
-

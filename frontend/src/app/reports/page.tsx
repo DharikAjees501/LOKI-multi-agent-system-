@@ -458,13 +458,13 @@ function ReportsContent({
 
             <div className="flex items-center gap-2">
               <button
-                onClick={() => reportApi.exportReport("scen-01", "pdf")}
+                onClick={() => reportApi.exportReport(getActiveScenarioId() || activeReport.id, "pdf")}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-accent text-white text-xs font-semibold hover:opacity-90 transition-all shadow-md shadow-accent/20"
               >
                 <Download className="h-4 w-4" /> Export PDF
               </button>
               <button
-                onClick={() => reportApi.exportReport("scen-01", "json")}
+                onClick={() => reportApi.exportReport(getActiveScenarioId() || activeReport.id, "json")}
                 className="flex items-center gap-2 px-3 py-2 rounded-xl bg-raised border border-line text-muted hover:text-ink text-xs font-mono font-semibold transition-all"
                 title="Export JSON Data"
               >
@@ -947,7 +947,7 @@ function ReportsContent({
             <div className="lg:col-span-6 space-y-6">
               <ExecutiveBriefingPanel report={activeReport} activeDoc={activeDoc} />
               <ReportAgentChat
-                scenarioId={getActiveScenarioId() || activeReport.id || "scen-01"}
+                scenarioId={getActiveScenarioId() || activeReport.id || ""}
                 scenarioName={activeReport.scenarioName}
                 documentName={activeDoc || activeReport.documentName}
               />

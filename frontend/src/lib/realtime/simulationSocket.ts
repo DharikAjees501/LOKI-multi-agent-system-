@@ -25,22 +25,33 @@ class SimulationSocketService {
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
   private pingIntervalId: any = null;
-  private activeScenarioId: string = "scen-01";
+  private activeScenarioId: string = "";
 
-  connect(scenarioId: string = "scen-01") {
-    this.activeScenarioId = scenarioId;
+  connect(scenarioId?: string) {
+    const targetId =
+      scenarioId ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("SWARMLENS_ACTIVE_SCENARIO_ID") ||
+          localStorage.getItem("LOKI_ACTIVE_SCENARIO_ID") ||
+          ""
+        : "");
+
+    if (!targetId || targetId === "scen-01") {
+      return;
+    }
+    this.activeScenarioId = targetId;
 
     if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
       return;
     }
 
     try {
-      this.socket = new WebSocket(`${WS_BASE_URL}/${scenarioId}`);
+      this.socket = new WebSocket(`${WS_BASE_URL}/${targetId}`);
 
       this.socket.onopen = () => {
         this.isConnected = true;
         this.reconnectAttempts = 0;
-        console.log(`[SimulationSocket] Connected to FastAPI WebSocket endpoint /ws/simulation/${scenarioId}`);
+        console.log(`[SimulationSocket] Connected to FastAPI WebSocket endpoint /ws/simulation/${targetId}`);
         this.startHeartbeat();
       };
 

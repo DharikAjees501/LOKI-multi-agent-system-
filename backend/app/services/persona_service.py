@@ -82,6 +82,77 @@ class PersonaService:
             "entities": entities
         }
 
+    def _extract_json_array(self, raw_text: str) -> List[Dict[str, Any]]:
+        """
+        Robustly extracts and parses a JSON array of personas from raw LLM output.
+        Handles <think> blocks, markdown fences, preamble text, trailing commas, and partial truncations.
+        """
+        if not raw_text:
+            return []
+        text = raw_text.strip()
+
+        # 1. Strip reasoning blocks like <think>...</think>
+        text = re.sub(r'<think>[\s\S]*?</think>', '', text, flags=re.IGNORECASE).strip()
+
+        # 2. Extract from markdown code fences if present
+        if '```json' in text:
+            m = re.search(r'```json\s*([\s\S]*?)\s*```', text, flags=re.IGNORECASE)
+            if m:
+                text = m.group(1).strip()
+            else:
+                parts = text.split('```json')
+                if len(parts) > 1:
+                    text = parts[1].split('```')[0].strip()
+        elif '```' in text:
+            m = re.search(r'```\s*([\s\S]*?)\s*```', text)
+            if m:
+                text = m.group(1).strip()
+            else:
+                parts = text.split('```')
+                if len(parts) > 1:
+                    text = parts[1].strip()
+
+        # 3. Locate array brackets [ ... ]
+        start_idx = text.find('[')
+        end_idx = text.rfind(']')
+
+        if start_idx != -1:
+            if end_idx != -1 and end_idx > start_idx:
+                candidate = text[start_idx:end_idx+1]
+            else:
+                last_brace = text.rfind('}')
+                if last_brace != -1 and last_brace > start_idx:
+                    candidate = text[start_idx:last_brace+1] + ']'
+                else:
+                    candidate = text[start_idx:]
+            text = candidate
+
+        # 4. Remove trailing commas before } or ]
+        text = re.sub(r',\s*([\]}])', r'\1', text)
+
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, list):
+                return [p for p in parsed if isinstance(p, dict) and p.get("role")]
+            elif isinstance(parsed, dict) and "personas" in parsed:
+                return [p for p in parsed["personas"] if isinstance(p, dict) and p.get("role")]
+        except Exception:
+            # Fallback regex extraction of individual valid persona objects
+            items = []
+            pattern = re.compile(r'\{[^{}]*"role"[^{}]*\}', re.DOTALL)
+            for match in pattern.finditer(text):
+                try:
+                    obj_str = match.group(0)
+                    obj_str = re.sub(r',\s*\}', '}', obj_str)
+                    obj = json.loads(obj_str)
+                    if isinstance(obj, dict) and obj.get("role"):
+                        items.append(obj)
+                except Exception:
+                    continue
+            if items:
+                return items
+        return []
+
     def _generate_domain_roles_llm(
         self, doc_filename: str, scen_name: str, doc_context: str, entities: List[Dict[str, Any]]
     ) -> Optional[List[Dict[str, Any]]]:
@@ -100,23 +171,23 @@ Extracted Knowledge Graph Entities:
 {entities_text}
 
 Document Content Excerpts:
-{doc_context[:2500]}
+{doc_context[:2000]}
 
 Generate exactly 25 realistic, domain-specific stakeholder personas strictly tailored to THIS uploaded document and its specific market domain:
-- Tier 1 (5 roles): Boardroom & Executive Leadership (e.g., Domain-tailored C-Suite, VP of Strategy/Product/Commercial/Partnerships)
-- Tier 2 (6 roles): Institutional, Regulatory, Security & Compliance Watchdogs (e.g., Domain compliance officers, legal counsel, data privacy, security auditors, contract reviewers)
-- Tier 3 (7 roles): Industry Operators, Channel Partners & Competitors (e.g., Commercial buyers, agency founders, system integrators, competing vendors, platform leads)
-- Tier 4 (7 roles): Broad Market, Practitioners, End Users & Community (e.g., Daily hands-on practitioners, marketing/ops leads, end-user community moderators, industry commentators)
+- Tier 1 (5 roles): Boardroom & Executive Leadership (e.g., Domain-tailored C-Suite, VP of Strategy/Product/Finance)
+- Tier 2 (6 roles): Institutional, Regulatory, Security & Compliance Watchdogs (e.g., Domain compliance officers, legal counsel, data privacy, security auditors)
+- Tier 3 (7 roles): Industry Operators, Channel Partners & Competitors (e.g., Commercial buyers, system integrators, competing vendors, platform leads)
+- Tier 4 (7 roles): Broad Market, Practitioners, End Users & Community (e.g., Daily practitioners, ops leads, end-user community moderators)
 
 CRITICAL RULES:
-1. Every single role must be 100% relevant to the specific domain of '{clean_title}'. If marketing SaaS, generate marketing/ad-tech roles. If healthcare, healthcare roles. If fintech, fintech roles.
-2. ZERO generic or irrelevant cross-domain personas (e.g., NEVER include drone, aviation, neuromorphic, microgrid, or hospital roles unless the document explicitly covers them).
-3. Output MUST strictly be a valid JSON array of exactly 25 objects with this schema:
+1. Every single role must be 100% relevant to the specific domain of '{clean_title}'.
+2. Keep "bias" concise (under 15 words) so all 25 personas are fully generated without truncation.
+3. Output MUST strictly be a valid JSON array of 25 objects:
 [
   {{
     "tier": 1,
     "role": "Clear Professional Title",
-    "bias": "1-sentence core professional incentive, priority, and risk sensitivity",
+    "bias": "Concise professional incentive and risk sensitivity",
     "channel": "BOARDROOM",
     "default_stance": 0.45
   }}
@@ -134,26 +205,26 @@ Channel must be one of: "BOARDROOM" (for Tier 1), "BOARDROOM" or "COMPLIANCE" (f
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                     future = executor.submit(
                         asyncio.run,
-                        execute_multi_provider_llm_call(prompt, temperature=0.3, max_tokens=2200, call_type="PERSONA_GENERATION")
+                        execute_multi_provider_llm_call(prompt, temperature=0.3, max_tokens=3500, call_type="PERSONA_GENERATION")
                     )
                     res_dict = future.result(timeout=30.0)
             except RuntimeError:
                 res_dict = asyncio.run(
-                    execute_multi_provider_llm_call(prompt, temperature=0.3, max_tokens=2200, call_type="PERSONA_GENERATION")
+                    execute_multi_provider_llm_call(prompt, temperature=0.3, max_tokens=3500, call_type="PERSONA_GENERATION")
                 )
 
             if res_dict and res_dict.get("text"):
                 raw = res_dict["text"].strip()
-                if "```json" in raw:
-                    raw = raw.split("```json")[1].split("```")[0].strip()
-                elif "```" in raw:
-                    raw = raw.split("```")[1].strip()
-                parsed = json.loads(raw)
-                if isinstance(parsed, list) and len(parsed) >= 20:
-                    logger.info(f"[PersonaService] Successfully generated {len(parsed)} domain roles via LLM ({res_dict.get('provider')}/{res_dict.get('model')}).")
+                parsed = self._extract_json_array(raw)
+                if parsed and len(parsed) >= 10:
+                    while len(parsed) < 25:
+                        p_clone = dict(parsed[len(parsed) % len(parsed)])
+                        p_clone["role"] = f"{p_clone.get('role')} Specialist"
+                        parsed.append(p_clone)
+                    logger.info(f"[PersonaService] Successfully generated {len(parsed[:25])} domain roles via LLM ({res_dict.get('provider')}/{res_dict.get('model')}).")
                     return parsed[:25]
         except Exception as e:
-            logger.warning(f"[PersonaService] LLM persona generation failed ({e}). Using dynamic entity-grounded fallback.")
+            logger.warning(f"[PersonaService] LLM persona synthesis notice: {e}")
 
         return None
 

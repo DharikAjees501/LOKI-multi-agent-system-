@@ -6,6 +6,7 @@ class ScenarioCreate(BaseModel):
     name: str
     description: str
     document_id: Optional[str] = None
+    user_id: Optional[str] = None
 
 class ScenarioModel(BaseModel):
     id: str
@@ -17,3 +18,4 @@ class ScenarioModel(BaseModel):
     status: str = "READY"  # READY, RUNNING, COMPLETED, DRAFT
     agentCount: int = 50
     overallRiskScore: int = 50
+    user_id: Optional[str] = None

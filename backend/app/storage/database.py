@@ -515,7 +515,7 @@ def init_db():
     );
     """)
 
-    # 13. Users Table
+    # 13. Users Table (Open Google Sign-In & Workspace Isolation)
     cursor.execute(f"""
     CREATE TABLE IF NOT EXISTS users (
         id VARCHAR(255) PRIMARY KEY,
@@ -523,11 +523,51 @@ def init_db():
         password_hash TEXT,
         full_name VARCHAR(255),
         picture TEXT,
+        avatar_url TEXT,
+        google_sub VARCHAR(255) UNIQUE,
+        free_sessions_remaining INTEGER DEFAULT 2,
+        total_sessions_run INTEGER DEFAULT 0,
         auth_provider VARCHAR(100) DEFAULT 'LOCAL',
         is_verified INTEGER DEFAULT 0,
-        created_at VARCHAR(255) NOT NULL
+        created_at VARCHAR(255) NOT NULL,
+        last_login_at VARCHAR(255)
     );
     """)
+
+    # Safe column migrations for users table
+    for col_name, col_type in [
+        ("avatar_url", "TEXT"),
+        ("google_sub", "VARCHAR(255)"),
+        ("free_sessions_remaining", "INTEGER DEFAULT 2"),
+        ("total_sessions_run", "INTEGER DEFAULT 0"),
+        ("last_login_at", "VARCHAR(255)")
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type};")
+        except Exception:
+            pass
+
+    # Safe column migration for scenarios & documents user_id
+    try:
+        cursor.execute("ALTER TABLE scenarios ADD COLUMN user_id VARCHAR(255);")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE documents ADD COLUMN user_id VARCHAR(255);")
+    except Exception:
+        pass
+
+    # Safe index creation for performance & workspace isolation
+    for idx_sql in [
+        "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);",
+        "CREATE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub);",
+        "CREATE INDEX IF NOT EXISTS idx_scenarios_user_id ON scenarios(user_id);",
+        "CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);"
+    ]:
+        try:
+            cursor.execute(idx_sql)
+        except Exception:
+            pass
 
     # 14. Verification Codes Table
     cursor.execute(f"""

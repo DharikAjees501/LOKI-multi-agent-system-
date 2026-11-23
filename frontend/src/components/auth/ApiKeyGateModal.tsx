@@ -6,16 +6,14 @@ import {
   Eye,
   EyeOff,
   ShieldCheck,
-  Sparkles,
   AlertCircle,
   CheckCircle2,
   Lock,
   Plus,
   Trash2,
-  Check,
-  ArrowDownUp,
   RefreshCw,
   Zap,
+  X,
 } from "lucide-react";
 import { keyService, ApiKeyItem, ProviderType } from "@/lib/api/keyService";
 
@@ -26,12 +24,12 @@ interface ApiKeyGateModalProps {
   onKeySubmitted?: (key: string) => void;
 }
 
-const PROVIDERS: { id: ProviderType; name: string; icon: string; placeholder: string }[] = [
-  { id: "gemini", name: "Google Gemini", icon: "💎", placeholder: "AIzaSy... or AQ...." },
-  { id: "openai", name: "OpenAI GPT", icon: "⚡", placeholder: "sk-proj-..." },
-  { id: "anthropic", name: "Anthropic Claude", icon: "🧠", placeholder: "sk-ant-..." },
-  { id: "groq", name: "Groq / OpenRouter", icon: "🚀", placeholder: "gsk_..." },
-  { id: "custom", name: "Custom Provider", icon: "🔑", placeholder: "Enter API key..." },
+const PROVIDERS: { id: ProviderType; name: string; icon: string; placeholder: string; models: string }[] = [
+  { id: "gemini", name: "Google Gemini", icon: "💎", placeholder: "AIzaSy... or AQ....", models: "Gemini 3.5 & 3.8" },
+  { id: "groq", name: "Groq", icon: "🚀", placeholder: "gsk_...", models: "OpenAI GPT-OSS 120B & 20B" },
+  { id: "openai", name: "OpenAI GPT", icon: "⚡", placeholder: "sk-proj-...", models: "GPT-4o & 4o-mini" },
+  { id: "anthropic", name: "Anthropic Claude", icon: "🧠", placeholder: "sk-ant-...", models: "Claude 3.5 Sonnet & Haiku" },
+  { id: "custom", name: "Custom Provider", icon: "🔑", placeholder: "sk-or-... or custom key", models: "OpenRouter & Compatible" },
 ];
 
 export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
@@ -62,7 +60,6 @@ export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
       setVerificationResult(null);
       setApiKey("");
       setKeyName("");
-      // If no keys exist, show form directly
       if (keys.length === 0) {
         setShowAddForm(true);
       } else {
@@ -115,8 +112,8 @@ export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
       setVerificationResult(null);
       setShowAddForm(false);
 
-      if (onKeySubmitted) {
-        onKeySubmitted(newKey.key);
+      if (onKeySubmitted && newKey.item?.key) {
+        onKeySubmitted(newKey.item.key);
       }
 
       if (!isRequired || updated.length > 0) {
@@ -151,23 +148,23 @@ export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
   const hasActiveKey = keysList.length > 0;
 
   return (
-    <div className="fixed inset-0 z-50 bg-base/85 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="w-full max-w-xl bg-surface border border-line rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 select-none">
+    <div className="fixed inset-0 z-50 bg-base/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-xl bg-surface border border-line rounded-3xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 select-none">
         {/* Modal Top Header */}
-        <div className="p-6 border-b border-line bg-raised/50 relative">
+        <div className="p-6 border-b border-line bg-raised/40 relative">
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-2xl bg-accent/15 border border-accent/30 flex items-center justify-center text-accent shrink-0">
-              <Key className="h-6 w-6" />
+            <div className="h-11 w-11 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 shrink-0">
+              <Key className="h-5 w-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-display text-lg font-bold text-ink">API Key & Provider Access</h3>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent font-semibold">
-                  MULTI-PROVIDER
+                <h3 className="font-display text-base font-bold text-ink">API Key & Model Access</h3>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 font-semibold">
+                  BYOK
                 </span>
               </div>
               <p className="text-xs text-muted mt-0.5">
-                Configure and manage your API credentials for multi-agent simulation.
+                Connect your official API credentials for high-throughput multi-agent simulations.
               </p>
             </div>
           </div>
@@ -175,44 +172,45 @@ export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
           {(!isRequired || hasActiveKey) && (
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 text-muted hover:text-ink text-xs font-mono px-2.5 py-1 rounded-lg bg-base border border-line"
+              className="absolute top-4 right-4 text-muted hover:text-ink p-1.5 rounded-lg hover:bg-base border border-transparent hover:border-line transition-all"
+              title="Close modal"
             >
-              Esc
+              <X className="h-4 w-4" />
             </button>
           )}
         </div>
 
         {/* Body Content */}
-        <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
-          {/* Active Key Pool List */}
+        <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+          {/* Active Key List */}
           {keysList.length > 0 && (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               <div className="flex items-center justify-between text-xs font-mono">
                 <span className="font-bold text-ink flex items-center gap-1.5">
-                  <Zap className="h-3.5 w-3.5 text-accent" /> CONFIGURED KEYS ({keysList.length})
+                  <Zap className="h-3.5 w-3.5 text-emerald-600" /> CONFIGURED KEYS ({keysList.length})
                 </span>
-                <span className="text-[10px] text-muted">ACTIVE PROVIDERS</span>
+                <span className="text-[10px] text-muted">PRIMARY ENGINE</span>
               </div>
 
               <div className="space-y-2">
                 {keysList.map((item, idx) => (
                   <div
                     key={item.id}
-                    className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                    className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
                       item.isPrimary
-                        ? "bg-accent/5 border-accent/40 shadow-xs"
+                        ? "bg-emerald-500/5 border-emerald-500/30 shadow-xs"
                         : "bg-base border-line hover:border-line/80"
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-9 w-9 rounded-xl bg-raised border border-line flex items-center justify-center text-base shrink-0">
+                      <div className="h-8 w-8 rounded-lg bg-raised border border-line flex items-center justify-center text-sm shrink-0">
                         {PROVIDERS.find((p) => p.id === item.provider)?.icon || "🔑"}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-bold font-mono text-ink truncate">{item.name}</span>
                           {item.isPrimary && (
-                            <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-accent text-white font-bold">
+                            <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-emerald-600 text-white font-bold">
                               PRIMARY
                             </span>
                           )}
@@ -222,7 +220,7 @@ export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
                             {item.key.substring(0, 7)}...{item.key.substring(item.key.length - 4)}
                           </span>
                           <span>•</span>
-                          <span className="uppercase">{item.provider}</span>
+                          <span className="uppercase text-[10px] text-emerald-600 font-semibold">{item.provider}</span>
                         </div>
                       </div>
                     </div>
@@ -253,7 +251,7 @@ export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
                       {!item.isPrimary && (
                         <button
                           onClick={() => handleSetPrimary(item.id)}
-                          className="px-2.5 py-1 rounded-lg bg-raised hover:bg-line border border-line text-[11px] font-mono text-muted hover:text-ink transition-all"
+                          className="px-2 py-1 rounded-lg bg-raised hover:bg-line border border-line text-[10px] font-mono text-muted hover:text-ink transition-all"
                           title="Set as Primary Key"
                         >
                           Make Primary
@@ -278,19 +276,19 @@ export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
           {keysList.length > 0 && !showAddForm && (
             <button
               onClick={() => setShowAddForm(true)}
-              className="w-full py-2.5 rounded-2xl border border-dashed border-line hover:border-accent text-xs font-mono text-muted hover:text-accent flex items-center justify-center gap-2 transition-all bg-base/50"
+              className="w-full py-2.5 rounded-xl border border-dashed border-line hover:border-emerald-500/60 text-xs font-mono text-muted hover:text-ink flex items-center justify-center gap-2 transition-all bg-base/40"
             >
-              <Plus className="h-4 w-4" />
-              <span>Add API Key (OpenAI, Gemini, Anthropic, Groq)</span>
+              <Plus className="h-3.5 w-3.5" />
+              <span>Add Another Provider Key</span>
             </button>
           )}
 
           {/* Add / Verify API Key Form */}
           {(showAddForm || keysList.length === 0) && (
-            <form onSubmit={handleAddKey} className="p-4 rounded-2xl bg-base border border-line space-y-4">
+            <form onSubmit={handleAddKey} className="p-4 rounded-2xl bg-base border border-line space-y-3.5">
               <div className="flex items-center justify-between border-b border-line pb-2.5">
                 <span className="text-xs font-mono font-bold text-ink flex items-center gap-1.5">
-                  <Key className="h-4 w-4 text-accent" /> ENTER API KEY CREDENTIAL
+                  <Key className="h-3.5 w-3.5 text-emerald-600" /> REGISTER API KEY
                 </span>
                 {keysList.length > 0 && (
                   <button
@@ -303,12 +301,12 @@ export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
                 )}
               </div>
 
-              {/* Provider Selection Bar */}
+              {/* Provider Selection */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-mono font-bold text-muted block uppercase">
+                <label className="text-[10px] font-mono font-bold text-muted block uppercase">
                   Select Provider
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {PROVIDERS.map((p) => (
                     <button
                       key={p.id}
@@ -317,14 +315,17 @@ export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
                         setProvider(p.id);
                         setVerificationResult(null);
                       }}
-                      className={`p-2.5 rounded-xl border text-xs font-mono flex items-center gap-2 transition-all ${
+                      className={`p-2 rounded-xl border text-xs font-mono text-left transition-all ${
                         provider === p.id
-                          ? "bg-accent/15 border-accent text-accent font-bold"
+                          ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-600 font-bold"
                           : "bg-surface border-line text-muted hover:text-ink hover:border-line/80"
                       }`}
                     >
-                      <span>{p.icon}</span>
-                      <span className="truncate">{p.name}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span>{p.icon}</span>
+                        <span className="truncate">{p.name}</span>
+                      </div>
+                      <div className="text-[9px] text-muted font-normal mt-0.5 truncate">{p.models}</div>
                     </button>
                   ))}
                 </div>
@@ -332,21 +333,21 @@ export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
 
               {/* Optional Key Nickname */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-mono font-bold text-muted block uppercase">
-                  Key Label / Identifier (Optional)
+                <label className="text-[10px] font-mono font-bold text-muted block uppercase">
+                  Key Label (Optional)
                 </label>
                 <input
                   type="text"
                   value={keyName}
                   onChange={(e) => setKeyName(e.target.value)}
-                  placeholder="e.g. Production Gemini Key, Backup OpenAI Key"
-                  className="w-full bg-surface border border-line rounded-xl px-3.5 py-2 text-xs text-ink font-mono placeholder:text-muted focus:outline-none focus:border-accent"
+                  placeholder="e.g. Primary Key"
+                  className="w-full bg-surface border border-line rounded-xl px-3 py-2 text-xs text-ink font-mono placeholder:text-muted/60 focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
               {/* Key Secret Input */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-mono font-bold text-muted block uppercase">
+                <label className="text-[10px] font-mono font-bold text-muted block uppercase">
                   API Key Secret
                 </label>
                 <div className="relative flex items-center">
@@ -358,13 +359,13 @@ export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
                       if (verificationResult) setVerificationResult(null);
                     }}
                     placeholder={PROVIDERS.find((p) => p.id === provider)?.placeholder || "Enter key..."}
-                    className="w-full bg-surface border border-line rounded-xl pl-3.5 pr-12 py-2.5 text-xs text-ink font-mono placeholder:text-muted focus:outline-none focus:border-accent"
+                    className="w-full bg-surface border border-line rounded-xl pl-3 pr-10 py-2 text-xs text-ink font-mono placeholder:text-muted/60 focus:outline-none focus:border-emerald-500"
                     autoFocus
                   />
                   <button
                     type="button"
                     onClick={() => setShowKey(!showKey)}
-                    className="absolute right-3.5 text-muted hover:text-ink transition-colors p-1"
+                    className="absolute right-3 text-muted hover:text-ink transition-colors p-1"
                     title={showKey ? "Hide Secret" : "Show Secret"}
                   >
                     {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -403,29 +404,29 @@ export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
                 </div>
               )}
 
-              {/* Form Actions: Verify API Key & Save Key */}
-              <div className="flex items-center justify-end gap-2 pt-2">
+              {/* Form Actions */}
+              <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   type="button"
                   onClick={handleVerify}
                   disabled={isVerifying || !apiKey.trim()}
-                  className="px-4 py-2 rounded-xl border border-line bg-raised hover:bg-line text-xs font-mono text-ink font-semibold disabled:opacity-50 flex items-center gap-1.5 transition-all"
+                  className="px-3.5 py-1.5 rounded-xl border border-line bg-raised hover:bg-line text-xs font-mono text-ink font-semibold disabled:opacity-50 flex items-center gap-1.5 transition-all"
                 >
                   {isVerifying ? (
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin text-accent" />
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin text-emerald-600" />
                   ) : (
-                    <ShieldCheck className="h-3.5 w-3.5 text-accent" />
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
                   )}
-                  <span>Verify API Key</span>
+                  <span>Verify Key</span>
                 </button>
 
                 <button
                   type="submit"
                   disabled={isVerifying || !apiKey.trim()}
-                  className="px-5 py-2 rounded-xl bg-accent text-white text-xs font-semibold hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5 transition-all shadow-md shadow-accent/20"
+                  className="px-4 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1.5 transition-all shadow-xs"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  <span>Save Key to Pool</span>
+                  <span>Save Key</span>
                 </button>
               </div>
             </form>
@@ -434,10 +435,13 @@ export const ApiKeyGateModal: React.FC<ApiKeyGateModalProps> = ({
 
         {/* Modal Footer */}
         {hasActiveKey && (
-          <div className="p-4 border-t border-line bg-raised/30 flex items-center justify-end">
+          <div className="p-4 border-t border-line bg-raised/30 flex items-center justify-between">
+            <span className="text-[11px] font-mono text-muted flex items-center gap-1.5">
+              <Lock className="h-3 w-3 text-emerald-600" /> Zero Server Log Retention
+            </span>
             <button
               onClick={onClose}
-              className="px-5 py-2 rounded-xl bg-accent text-white text-xs font-semibold hover:opacity-90 transition-all shadow-md shadow-accent/20"
+              className="px-4 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-all shadow-xs"
             >
               Continue to Simulation
             </button>
