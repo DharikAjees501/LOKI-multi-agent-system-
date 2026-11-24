@@ -4,6 +4,7 @@ import re
 import random
 import datetime
 import time
+import uuid
 from enum import Enum
 from typing import Dict, List, Any, Optional, Sequence
 from pydantic import BaseModel, Field
@@ -246,7 +247,7 @@ Respond strictly in RAW JSON matching this exact structure:
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             time_str = datetime.datetime.now().strftime("%H:%M:%S")
             step_id = f"oasis-r{round_num}-{scenario_id}-{agent.id}"
-            evt_id = f"evt-r{round_num}-{scenario_id}-{agent.numberId:03d}-{int(time.time() * 1000) % 10000}"
+            evt_id = f"evt-r{round_num}-{scenario_id}-{agent.numberId:03d}-{uuid.uuid4().hex[:6]}"
 
             # Memory-only state generation: DB commit is batched at round completion to prevent pool exhaustion
             step_record = (
@@ -431,6 +432,19 @@ Respond strictly in RAW JSON matching this exact structure:
         for r in range(1, 6):
             self.current_round = r
             is_shock_round = (r == 3) if is_what_if else False
+
+            # Update scenario round state in DB for real-time progress tracking
+            try:
+                conn_r = get_db_connection()
+                try:
+                    cur_r = conn_r.cursor()
+                    round_status = f"RUNNING_WHAT_IF_ROUND_{r}" if is_what_if else f"RUNNING_ROUND_{r}"
+                    execute_query(cur_r, "UPDATE scenarios SET status = ? WHERE id = ?", (round_status, scenario_id))
+                    conn_r.commit()
+                finally:
+                    conn_r.close()
+            except Exception as err:
+                logger.debug(f"[OasisEngine] Round status update notice: {err}")
 
             # Partition each tier proportionally across 5 rounds so 100% of agents deliberate live
             def get_tier_slice(tier_list: List[AgentModel], round_idx: int) -> List[AgentModel]:

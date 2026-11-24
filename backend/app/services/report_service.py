@@ -872,9 +872,16 @@ SUPPORTING PERSPECTIVES:
         """
         calculated_risk_score = 50
         key_risks = []
+        is_simulating = False
+        scen_st = ""
         conn = get_db_connection()
         try:
             cursor = conn.cursor()
+
+            cursor.execute("SELECT status FROM scenarios WHERE id = ?", (scenario_id,))
+            scen_status_row = cursor.fetchone()
+            scen_st = (scen_status_row["status"] if scen_status_row and "status" in scen_status_row else "") or ""
+            is_simulating = scen_st in ["GENERATING_GRAPH", "RUNNING_BASELINE", "RUNNING_WHAT_IF", "RUNNING"] or scen_st.startswith("RUNNING_")
 
             # Query all agents for this scenario to derive real stance distribution
             cursor.execute("SELECT final_stance, initial_stance, sentiment, role, tier FROM agents WHERE scenario_id = ?", (scenario_id,))
@@ -1025,8 +1032,10 @@ SUPPORTING PERSPECTIVES:
         return {
             "overallRiskScore": calculated_risk_score,
             "severityThreshold": "CRITICAL" if calculated_risk_score >= 80 else ("HIGH" if calculated_risk_score >= 50 else "MODERATE"),
-            "primaryConcern": key_risks[0]["title"],
-            "keyRisks": key_risks
+            "primaryConcern": key_risks[0]["title"] if key_risks else "Deliberation in progress",
+            "keyRisks": key_risks,
+            "is_simulating": is_simulating,
+            "simulation_status": scen_st
         }
 
     def get_sentiment(self, scenario_id: str) -> Dict[str, Any]:
@@ -1596,6 +1605,31 @@ SUPPORTING PERSPECTIVES:
 
         lead_role = "Key Operational Stakeholders"
         lead_quote_snippet = f"Identified operational friction under '{document_name}'."
+
+        scen_status = (scen.get("status") or "") if scen else ""
+        is_simulating = scen_status in ["GENERATING_GRAPH", "RUNNING_BASELINE", "RUNNING_WHAT_IF", "RUNNING"] or scen_status.startswith("RUNNING_")
+
+        if not rep_row and is_simulating:
+            return {
+                "id": f"rep-{scenario_id}",
+                "scenario_id": scenario_id,
+                "scenarioName": scenario_name,
+                "title": f"Executive Simulation Forecast: {scenario_name}",
+                "is_simulating": True,
+                "simulation_status": scen_status,
+                "message": "Simulation in progress: 200 agents are actively deliberating across 5 rounds. Live synthesis will finalize once all rounds complete.",
+                "risk_score": 0,
+                "overallRiskScore": 0,
+                "total_agents": 200,
+                "generatedAt": datetime.now().strftime("%d %b %Y, %H:%M") + " EST",
+                "decision_verdict": "CONDITIONAL_GO",
+                "one_line_verdict": "Deliberation in progress across 200 autonomous personas.",
+                "executive_summary": "Multi-agent deliberation is currently executing in the background across Boardroom, Media, and Public channels.",
+                "key_risks": [],
+                "slides": [],
+                "voiceScript": "",
+                "audio_script": ""
+            }
 
         if rep_row:
             risk_score = rep_row["risk_score"]

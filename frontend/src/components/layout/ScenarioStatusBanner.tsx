@@ -31,7 +31,7 @@ export function ScenarioStatusBanner({ onScenarioCompleted }: ScenarioStatusBann
         const newStatus = currentScen.status || "READY";
         setStatus(newStatus);
 
-        const isRunningPrev = ["GENERATING_GRAPH", "RUNNING_BASELINE", "RUNNING_WHAT_IF", "RUNNING"].includes(prevStatus);
+        const isRunningPrev = prevStatus === "GENERATING_GRAPH" || prevStatus === "SIMULATING" || prevStatus.startsWith("RUNNING");
         const isDoneNew = ["COMPLETED", "BASELINE_COMPLETED", "WHAT_IF_COMPLETED", "READY", "CONFIGURED"].includes(newStatus);
 
         if (isRunningPrev && isDoneNew && onScenarioCompleted) {
@@ -65,30 +65,35 @@ export function ScenarioStatusBanner({ onScenarioCompleted }: ScenarioStatusBann
 
   // Poll only while actively running a simulation or graph generation
   useEffect(() => {
-    const isRunning = ["GENERATING_GRAPH", "RUNNING_BASELINE", "RUNNING_WHAT_IF", "RUNNING"].includes(status);
+    const isRunning = status === "GENERATING_GRAPH" || status === "SIMULATING" || status.startsWith("RUNNING");
     if (!isRunning) return;
 
-    const interval = setInterval(checkStatus, 3000);
+    const interval = setInterval(checkStatus, 2000);
     return () => clearInterval(interval);
   }, [status]);
 
-  const isPending = ["GENERATING_GRAPH", "RUNNING_BASELINE", "RUNNING_WHAT_IF", "RUNNING"].includes(status);
+  const isPending = status === "GENERATING_GRAPH" || status === "SIMULATING" || status.startsWith("RUNNING");
 
   if (!isPending) {
     return null;
   }
 
   const getStatusLabel = () => {
-    switch (status) {
-      case "GENERATING_GRAPH":
-        return "Extracting Grounded GraphRAG Entities & Generating 200 Heavy Agent Personas...";
-      case "RUNNING_BASELINE":
-        return "Executing Baseline 5-Round OASIS Swarm Simulation...";
-      case "RUNNING_WHAT_IF":
-        return "Executing Phase B What-If Shock Simulation across 200 Agents...";
-      default:
-        return "Running Autonomous Swarm Simulation Pipeline...";
+    if (status === "GENERATING_GRAPH") {
+      return "Extracting Grounded GraphRAG Entities & Generating 200 Heavy Agent Personas...";
     }
+    if (status.includes("ROUND_")) {
+      const match = status.match(/ROUND_(\d+)/);
+      const rNum = match ? match[1] : "1";
+      return `Executing 5-Round OASIS Swarm Simulation (Round 0${rNum} / 05)...`;
+    }
+    if (status === "RUNNING_BASELINE") {
+      return "Executing Baseline 5-Round OASIS Swarm Simulation across 200 Personas...";
+    }
+    if (status === "RUNNING_WHAT_IF") {
+      return "Executing Phase B What-If Shock Simulation across 200 Agents...";
+    }
+    return "Running Autonomous Swarm Simulation Pipeline...";
   };
 
   return (

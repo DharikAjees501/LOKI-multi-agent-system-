@@ -145,7 +145,7 @@ export default function RiskSynthesisPage() {
   return (
     <AppShell title="RISK SYNTHESIS" subtitle="EXECUTIVE SCENARIO RISK DASHBOARD">
       {({ currentRound, simulationStatus, onInterrogateAgent }) => {
-        const isRunning = ["GENERATING_GRAPH", "RUNNING_BASELINE", "RUNNING_WHAT_IF", "RUNNING"].includes(simulationStatus);
+        const isRunning = (simulationStatus as string) === "GENERATING_GRAPH" || (simulationStatus as string) === "SIMULATING" || (simulationStatus as string).startsWith("RUNNING") || Boolean((risksData as any)?.is_simulating);
         return (
           <div className="space-y-6 max-w-7xl mx-auto pb-32 select-none">
             <ScenarioStatusBanner onScenarioCompleted={loadRiskData} />

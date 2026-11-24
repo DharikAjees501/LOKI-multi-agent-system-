@@ -154,15 +154,14 @@ function ReportsContent({
   }
 
   const activeReport = report;
-  const isRunning = [
-    "GENERATING_GRAPH",
-    "RUNNING_BASELINE",
-    "RUNNING_WHAT_IF",
-    "RUNNING",
-  ].includes(simulationStatus);
+  const isRunning =
+    simulationStatus === "GENERATING_GRAPH" ||
+    simulationStatus === "SIMULATING" ||
+    simulationStatus.startsWith("RUNNING") ||
+    Boolean((activeReport as any)?.is_simulating);
   const isSimulationCompleted =
     forceComplete ||
-    (!isRunning && (simulationStatus.includes("COMPLETED") || currentRound >= 5));
+    (!isRunning && ["COMPLETED", "BASELINE_COMPLETED", "WHAT_IF_COMPLETED"].includes(simulationStatus));
 
   // Extract structured executive metrics directly from live simulation backend
   const riskScore =

@@ -12,7 +12,7 @@ from app.services.graph_service import graph_service
 from app.engine.orchestrator import orchestrator
 from app.services.persona_service import persona_service
 from app.engine.oasis_engine import oasis_engine
-from app.storage.database import get_db_connection
+from app.storage.database import get_db_connection, execute_query
 from app.core.config import settings
 from app.core.logging import logger
 from app.core.security import get_optional_current_user, get_current_user, verify_scenario_access
@@ -88,15 +88,16 @@ async def create_and_run_scenario(
 
     async def execute_isolated_pipeline():
         try:
-            # 1. GraphRAG extraction & 200-agent persona generation for scen_id
+            logger.info(f"[Isolated Pipeline] Step 1: Running GraphRAG extraction for {scen_id}")
             await orchestrator.run_scenario_pipeline(
                 scenario_id=scen_id,
                 document_id=doc_id,
                 scenario_title=title,
                 description=desc
             )
-            # 2. Spawn personas & run 5-round OASIS simulation
+            logger.info(f"[Isolated Pipeline] Step 2: Spawning 200 personas for {scen_id}")
             agents = persona_service.generate_personas_for_scenario(scen_id, total_agents=200)
+            logger.info(f"[Isolated Pipeline] Step 3: Launching 5-round OASIS deliberation for {scen_id}")
             await oasis_engine.run_full_simulation(
                 scenario_id=scen_id,
                 agents=agents,
@@ -105,8 +106,19 @@ async def create_and_run_scenario(
                 risk_threshold=35.0,
                 is_what_if=payload.is_what_if or False
             )
+            logger.info(f"[Isolated Pipeline] Step 4: Full simulation successfully concluded for {scen_id}.")
         except Exception as err:
-            logger.error(f"[Isolated Pipeline Error for {scen_id}]: {err}")
+            logger.error(f"[Isolated Pipeline Error for {scen_id}]: {err}", exc_info=True)
+            try:
+                conn_err = get_db_connection()
+                try:
+                    cur_err = conn_err.cursor()
+                    execute_query(cur_err, "UPDATE scenarios SET status = 'FAILED' WHERE id = ?", (scen_id,))
+                    conn_err.commit()
+                finally:
+                    conn_err.close()
+            except Exception:
+                pass
 
     # Dispatch non-blocking pipeline task
     asyncio.create_task(execute_isolated_pipeline())

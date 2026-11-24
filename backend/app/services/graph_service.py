@@ -54,7 +54,7 @@ class GraphService:
             execute_query(cursor, "DELETE FROM graph_edges WHERE scenario_id = ?", (scenario_id,))
 
             for i, ent in enumerate(all_entities):
-                node_id = f"ent-{abs(hash(ent.name)) % 10000:04d}"
+                node_id = f"{scenario_id}-ent-{abs(hash(ent.name)) % 1000000:06d}"
                 angle = (2 * math.pi * i) / max(1, total)
                 x = center_x + radius * math.cos(angle)
                 y = center_y + radius * math.sin(angle)
@@ -83,7 +83,7 @@ class GraphService:
 
                 execute_query(
                     cursor,
-                    """INSERT INTO graph_nodes
+                    """INSERT OR REPLACE INTO graph_nodes
                        (id, scenario_id, label, node_type, entity_category, x, y, val, connections, source_document_id, source_chunk)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (node_id, scenario_id, ent.name, "ENTITY", ent.type, round(x, 2), round(y, 2), val, "[]", document_id, ent.source_chunk)
@@ -91,9 +91,9 @@ class GraphService:
 
             for rag_out in rag_outputs:
                 for rel in rag_out.relationships:
-                    src_id = seen_nodes.get(rel.source, f"ent-{abs(hash(rel.source)) % 10000:04d}")
-                    tgt_id = seen_nodes.get(rel.target, f"ent-{abs(hash(rel.target)) % 10000:04d}")
-                    edge_id = f"ke-{abs(hash(f'{src_id}-{tgt_id}')) % 10000:04d}"
+                    src_id = seen_nodes.get(rel.source, f"{scenario_id}-ent-{abs(hash(rel.source)) % 1000000:06d}")
+                    tgt_id = seen_nodes.get(rel.target, f"{scenario_id}-ent-{abs(hash(rel.target)) % 1000000:06d}")
+                    edge_id = f"{scenario_id}-ke-{abs(hash(f'{src_id}-{tgt_id}')) % 1000000:06d}"
 
                     if edge_id in seen_edges:
                         continue
@@ -112,7 +112,7 @@ class GraphService:
 
                     execute_query(
                         cursor,
-                        """INSERT INTO graph_edges
+                        """INSERT OR REPLACE INTO graph_edges
                            (id, scenario_id, source, target, relationship, strength, confidence, source_chunk)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                         (edge_id, scenario_id, src_id, tgt_id, rel.relationship, 4, rel.confidence, rel.source_chunk)
@@ -502,12 +502,19 @@ class GraphService:
             execute_query(cursor, "SELECT * FROM graph_edges WHERE scenario_id = ?", (scenario_id,))
             edges_rows = cursor.fetchall()
 
-            execute_query(cursor, "SELECT name, description, document_id FROM scenarios WHERE id = ?", (scenario_id,))
+            execute_query(cursor, "SELECT name, description, document_id, status FROM scenarios WHERE id = ?", (scenario_id,))
             scen = cursor.fetchone()
         finally:
             conn.close()
 
+        scen_status = (scen.get("status") or "") if scen else ""
+        is_running = scen_status in ["GENERATING_GRAPH", "RUNNING_BASELINE", "RUNNING_WHAT_IF", "RUNNING"]
+
         if not nodes_rows or len(nodes_rows) < 4:
+            # If the pipeline is actively running in the background, DO NOT mutate the database concurrently!
+            if is_running:
+                return ScenarioGraphResponse(scenario_id=scenario_id, nodes=[], edges=[])
+
             doc_id = scen.get("document_id") if scen else "doc-default"
             doc_title = scen.get("name") if scen else "Strategy Scenario"
             doc_desc = scen.get("description") if scen else "Strategic risk framework"

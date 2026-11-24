@@ -81,7 +81,7 @@ class OrchestratorEngine:
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "UPDATE scenarios SET document_id = ?, name = COALESCE(NULLIF(?, ''), name), description = COALESCE(NULLIF(?, ''), description), status = 'READY' WHERE id = ?",
+                "UPDATE scenarios SET document_id = ?, name = COALESCE(NULLIF(?, ''), name), description = COALESCE(NULLIF(?, ''), description) WHERE id = ?",
                 (document_id, scenario_title, description, scenario_id)
             )
             conn.commit()

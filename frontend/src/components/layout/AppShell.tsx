@@ -10,7 +10,7 @@ import { ApiKeyGateModal } from "@/components/auth/ApiKeyGateModal";
 import { NewUserOnboarding } from "@/components/onboarding/NewUserOnboarding";
 import { keyService } from "@/lib/api/keyService";
 import { Agent } from "@/types";
-import { autoInitializeActiveScenario } from "@/lib/api/scenarioApi";
+import { autoInitializeActiveScenario, getActiveScenarioId, scenarioApi } from "@/lib/api/scenarioApi";
 
 interface AppShellProps {
   title: string;
@@ -145,40 +145,61 @@ export const AppShell: React.FC<AppShellProps> = ({ title, subtitle, children })
     };
   }, [totalRounds]);
 
-  // Progressive simulation round timer
+  // Progressive simulation round sync with real backend execution
   useEffect(() => {
     let interval: any;
     if (simulationStatus === "RUNNING") {
-      interval = setInterval(() => {
-        setCurrentRound((prev) => {
-          if (prev < totalRounds) {
-            return prev + 1;
+      const syncWithBackend = async () => {
+        try {
+          const currentId = getActiveScenarioId();
+          if (!currentId) return;
+          const scens = await scenarioApi.getScenarios();
+          const currentScen = scens.find((s: any) => s.id === currentId);
+          if (!currentScen) return;
+
+          const st = currentScen.status || "";
+          if (st.includes("ROUND_")) {
+            const match = st.match(/ROUND_(\d+)/);
+            if (match) {
+              const rNum = parseInt(match[1], 10);
+              setCurrentRound(rNum);
+              if (typeof window !== "undefined") {
+                localStorage.setItem("SWARMLENS_CURRENT_ROUND", rNum.toString());
+                localStorage.setItem("LOKI_CURRENT_ROUND", rNum.toString());
+              }
+            }
           }
-          return prev;
-        });
-      }, 2500);
+
+          if (["COMPLETED", "BASELINE_COMPLETED", "WHAT_IF_COMPLETED"].includes(st as string)) {
+            setCurrentRound(totalRounds);
+            setSimulationStatus("COMPLETED");
+            if (typeof window !== "undefined") {
+              localStorage.setItem("LOKI_CURRENT_ROUND", totalRounds.toString());
+              localStorage.setItem("LOKI_SIM_STATUS", "COMPLETED");
+              localStorage.setItem("SWARMLENS_CURRENT_ROUND", totalRounds.toString());
+              localStorage.setItem("SWARMLENS_SIM_STATUS", "COMPLETED");
+              window.dispatchEvent(new Event("simulation_completed"));
+              window.dispatchEvent(new Event("scenario_changed"));
+            }
+          } else if ((st as string) === "FAILED") {
+            setSimulationStatus("IDLE");
+            if (typeof window !== "undefined") {
+              localStorage.setItem("SWARMLENS_SIM_STATUS", "IDLE");
+              localStorage.setItem("LOKI_SIM_STATUS", "IDLE");
+            }
+          }
+        } catch (err) {
+          console.warn("[AppShell] Simulation status polling notice:", err);
+        }
+      };
+
+      syncWithBackend();
+      interval = setInterval(syncWithBackend, 2000);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
   }, [simulationStatus, totalRounds]);
-
-  // Clean completion watcher outside updater cycle
-  useEffect(() => {
-    if (simulationStatus === "RUNNING" && currentRound >= totalRounds) {
-      setSimulationStatus("COMPLETED");
-      if (typeof window !== "undefined") {
-        localStorage.setItem("LOKI_CURRENT_ROUND", totalRounds.toString());
-        localStorage.setItem("LOKI_SIM_STATUS", "COMPLETED");
-        localStorage.setItem("SWARMLENS_CURRENT_ROUND", totalRounds.toString());
-        localStorage.setItem("SWARMLENS_SIM_STATUS", "COMPLETED");
-        setTimeout(() => {
-          window.dispatchEvent(new Event("simulation_completed"));
-          window.dispatchEvent(new Event("scenario_changed"));
-        }, 0);
-      }
-    }
-  }, [simulationStatus, currentRound, totalRounds]);
 
   const hasUploadedDoc = () => {
     if (typeof window === "undefined") return false;

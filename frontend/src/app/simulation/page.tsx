@@ -237,7 +237,7 @@ function SimulationWorkspaceContent({
     if (simulationStatus === "RUNNING") {
       setScrubRound(currentRound);
     }
-    if ((simulationStatus === "COMPLETED" || currentRound >= 5) && phase !== "COMPLETED") {
+    if (simulationStatus === "COMPLETED" && phase !== "COMPLETED") {
       setScrubRound(5);
       Promise.all([
         reportApi.getRiskThresholdMonitor(activeId, riskThreshold),
