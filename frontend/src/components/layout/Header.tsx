@@ -58,7 +58,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
   const [hasDoc, setHasDoc] = useState<boolean>(false);
-  const [docSubtitle, setDocSubtitle] = useState<string>(subtitle);
+  const [docSubtitle, setDocSubtitle] = useState<string>("");
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState<boolean>(false);
 
@@ -88,7 +88,7 @@ export const Header: React.FC<HeaderProps> = ({
           : "";
         setDocSubtitle(`${doc}${descPreview}`);
       } else {
-        setDocSubtitle("No Active Document Loaded · Click New Simulation to Begin");
+        setDocSubtitle("");
       }
     }
   };
@@ -169,53 +169,47 @@ export const Header: React.FC<HeaderProps> = ({
           <h2 className="font-display text-lg font-bold tracking-tight text-ink uppercase">
             {title}
           </h2>
-          <p className="text-[11px] font-mono text-muted tracking-wide">{docSubtitle}</p>
+          {docSubtitle ? (
+            <p className="text-[11px] font-mono text-muted tracking-wide truncate max-w-md">{docSubtitle}</p>
+          ) : null}
         </div>
 
-        {/* System Status Metrics - Centered Compact Sleek AGENTS, ROUND & API KEY / BYOK Pills */}
-        <div className="flex-1 hidden lg:flex items-center justify-center gap-2.5 text-[10.5px] font-mono px-4">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 shadow-2xs">
-            <Cpu className="h-3 w-3 text-emerald-600 shrink-0" />
-            <span className="text-emerald-800/80 font-medium">AGENTS:</span>
-            <span className="text-emerald-950 font-bold" suppressHydrationWarning>
-              {hasDoc ? activeAgentsCount : 0}
-            </span>
-          </div>
+        {/* System Status Metrics - Sleek Compact Round & API Key Status Capsule */}
+        <div className="flex-1 hidden md:flex items-center justify-center gap-2.5 px-4">
+          <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-raised/70 border border-line/70 backdrop-blur-md shadow-2xs">
+            {/* Deliberation Round / Cycle Indicator */}
+            <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-surface border border-line/50 text-xs font-mono shadow-2xs">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="text-muted/80 font-medium text-[10.5px] tracking-wider uppercase">ROUND</span>
+              <span className="font-bold text-ink text-[11px]" suppressHydrationWarning>
+                {String(currentRound).padStart(2, "0")}
+                <span className="text-muted/50 font-normal"> / 05</span>
+              </span>
+            </div>
 
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 shadow-2xs">
-            <Activity className="h-3 w-3 text-emerald-600 shrink-0" />
-            <span className="text-emerald-800/80 font-medium">ROUND:</span>
-            <span className="text-emerald-950 font-bold" suppressHydrationWarning>
-              {String(currentRound).padStart(2, "0")}
-            </span>
+            {/* API Key Status Pill */}
+            <button
+              onClick={() => setIsKeyModalOpen(true)}
+              className={`flex items-center gap-2 px-2.5 py-1 rounded-full border text-xs font-mono transition-all hover:scale-102 cursor-pointer shadow-2xs ${
+                isKeyActive
+                  ? "bg-surface hover:bg-line/40 border-line/50 text-emerald-600"
+                  : "bg-amber-500/10 border-amber-500/30 text-amber-600 hover:bg-amber-500/20"
+              }`}
+              title={isKeyActive ? "Click to manage API Keys & Fallback pool" : "Click to configure Gemini or Groq API Key"}
+            >
+              <Key className="h-3 w-3 shrink-0 text-muted" />
+              <span className="font-medium text-muted/80 text-[10.5px] tracking-wider uppercase">API KEY</span>
+              <div className="flex items-center gap-1.5 pl-1.5 border-l border-line/60">
+                <span className={`h-1.5 w-1.5 rounded-full ${isKeyActive ? "bg-emerald-500 shadow-xs shadow-emerald-500/50" : "bg-amber-500 animate-pulse"}`} />
+                <span className={`text-[10.5px] font-bold ${isKeyActive ? "text-emerald-600" : "text-amber-600"}`}>
+                  {isKeyActive ? "ACTIVE" : "CONNECT"}
+                </span>
+              </div>
+            </button>
           </div>
-
-          {/* API Key Status Pill */}
-          <button
-            onClick={() => setIsKeyModalOpen(true)}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10.5px] font-mono transition-all hover:scale-105 cursor-pointer shadow-2xs ${
-              isKeyActive
-                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/20"
-                : "bg-amber-500/10 border-amber-500/30 text-amber-600 hover:bg-amber-500/20"
-            }`}
-            title={isKeyActive ? "Click to manage API Keys & Fallback pool" : "Click to configure Gemini or Groq API Key"}
-          >
-            <Key className="h-3 w-3 shrink-0" />
-            <span className="font-medium text-ink/70">API KEY:</span>
-            <span className="font-bold flex items-center gap-1">
-              {isKeyActive ? (
-                <>
-                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                  <span className="text-emerald-700">ACTIVE</span>
-                </>
-              ) : (
-                <>
-                  <AlertCircle className="h-3 w-3 text-amber-500" />
-                  <span className="text-amber-700">CONFIGURE</span>
-                </>
-              )}
-            </span>
-          </button>
         </div>
 
         {/* Modern SaaS Quick Action Capsule */}
