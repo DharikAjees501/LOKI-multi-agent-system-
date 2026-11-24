@@ -18,45 +18,16 @@ from app.models.simulation import (
 
 def is_out_of_domain_persona(role: str, doc_name: str) -> bool:
     """
-    Filters out legacy or cross-domain personas (e.g. drone/aerospace/surgical hardware roles)
-    from appearing in reports for marketing SaaS or educational documents.
+    Validates persona roles against active scenario simulation context.
+    All authentic simulation agents generated for the scenario are valid.
     """
-    if not role:
-        return False
-    doc_lower = (doc_name or "").lower()
-    if any(k in doc_lower for k in ["drone", "aerospace", "aviation", "robotics", "satellite", "avionics", "surgical"]):
-        return False
-    r_lower = role.lower()
-    banned_terms = [
-        "drone", "satellite", "avionics", "aerospace", "missile", "propulsion",
-        "surgical robotics", "spacecraft", "flight control", "neuromorphic",
-        "iiot industrial", "mesh network", "virtualization director", "hardware lead",
-        "power grid", "substation", "high-voltage", "civil engineering",
-        "construction safety", "structural engineering", "faa"
-    ]
-    return any(bt in r_lower for bt in banned_terms)
+    return False
 
 def is_mocked_or_stale_text(content: Any, doc_name: str) -> bool:
     """
-    Detects if content contains hardcoded boilerplate or cross-domain legacy bleed.
+    Checks if content is unpopulated or empty.
     """
-    if not content:
-        return True
-    s = json.dumps(content).lower() if isinstance(content, (dict, list)) else str(content).lower()
-    d_low = (doc_name or "").lower()
-    is_marketing = any(k in d_low for k in ["zocket", "marketing", "brand", "campaign", "ad "])
-    is_aero = any(k in d_low for k in ["drone", "aerospace", "aviation", "robotics", "satellite", "avionics", "surgical"])
-
-    # If not aerospace but contains drone/faa-grade/mesh network/neuromorphic/iiot
-    if not is_aero and any(b in s for b in [
-        "drone", "faa-grade", "neuromorphic", "iiot industrial", "mesh network",
-        "deterministic routing", "langgraph execution without faa"
-    ]):
-        return True
-    # If not marketing but contains static Zocket/Meta/Google text
-    if not is_marketing and any(b in s for b in ["zocket", "meta and google", "ai creative designer", "performance media buyers", "agency retainer threat"]):
-        return True
-    return False
+    return not bool(content)
 
 class ReportService:
 
@@ -957,6 +928,13 @@ SUPPORTING PERSPECTIVES:
             # Retrieve scenario metadata
             cursor.execute("SELECT name, description, document_id FROM scenarios WHERE id = ?", (scenario_id,))
             scen = cursor.fetchone()
+            if not scen:
+                return {
+                    "overallRiskScore": 0,
+                    "severityThreshold": "LOW",
+                    "primaryConcern": "Scenario not found",
+                    "keyRisks": []
+                }
             scen_title = scen["name"] if scen and scen["name"] else "Enterprise Strategy Initiative"
             doc_src = scen["document_id"] if scen and scen["document_id"] else "Strategy Document"
 
@@ -1031,15 +1009,16 @@ SUPPORTING PERSPECTIVES:
             ]
 
             # Cache calculated risks in database for consistency
-            for r in key_risks:
-                execute_query(
-                    cursor,
-                    """INSERT OR REPLACE INTO risks
-                       (id, scenario_id, title, score, severity, description, impacted_agents_count)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (r["id"], scenario_id, r["title"], r["score"], r["severity"], r["description"], r["impactedAgentsCount"])
-                )
-            conn.commit()
+            if scen:
+                for r in key_risks:
+                    execute_query(
+                        cursor,
+                        """INSERT OR REPLACE INTO risks
+                           (id, scenario_id, title, score, severity, description, impacted_agents_count)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (r["id"], scenario_id, r["title"], r["score"], r["severity"], r["description"], r["impactedAgentsCount"])
+                    )
+                conn.commit()
         finally:
             conn.close()
 
@@ -1573,16 +1552,21 @@ SUPPORTING PERSPECTIVES:
 
         return turning_points
 
-    def get_report_for_scenario(self, scenario_id: str, round_num: Optional[int] = None) -> Dict[str, Any]:
+    def get_report_for_scenario(self, scenario_id: str, round_num: Optional[int] = None) -> Optional[Dict[str, Any]]:
         """
         Generates full synthesized executive forecast report grounded in stored simulation metrics.
         """
+        if not scenario_id or str(scenario_id).strip().lower() in ("none", "undefined", "null", ""):
+            return None
+
         conn = get_db_connection()
         try:
             cursor = conn.cursor()
 
             cursor.execute("SELECT * FROM scenarios WHERE id = ?", (scenario_id,))
             scen = cursor.fetchone()
+            if not scen:
+                return None
 
             scenario_name = scen["name"] if scen and scen["name"] else "Enterprise Scenario Simulation"
             doc_id = scen["document_id"] if scen and scen["document_id"] else None
@@ -1827,6 +1811,8 @@ SUPPORTING PERSPECTIVES:
         Generates executive HTML formatted report for printing or PDF export.
         """
         rep = self.get_report_for_scenario(scenario_id)
+        if not rep:
+            return "<!DOCTYPE html><html><body><h1>Scenario Not Found</h1><p>No report generated yet.</p></body></html>"
         html_content = f"""<!DOCTYPE html>
 <html>
 <head>

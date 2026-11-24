@@ -588,10 +588,21 @@ def init_db():
         api_key TEXT NOT NULL,
         status VARCHAR(100) DEFAULT 'UNVERIFIED',
         is_primary INTEGER DEFAULT 0,
+        user_id VARCHAR(255),
         created_at VARCHAR(255) NOT NULL,
         updated_at VARCHAR(255) NOT NULL
     );
     """)
+
+    # Safe column migration and index for api_keys user_id
+    try:
+        cursor.execute("ALTER TABLE api_keys ADD COLUMN user_id VARCHAR(255);")
+    except Exception:
+        pass
+    try:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);")
+    except Exception:
+        pass
 
     # 16. OASIS Simulation Steps Table (PostgreSQL & SQLite)
     cursor.execute(f"""

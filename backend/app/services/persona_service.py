@@ -13,14 +13,14 @@ from app.storage.database import get_db_connection
 from app.core.logging import logger
 from app.engine.llm_client import execute_multi_provider_llm_call, get_active_api_keys
 
-_persona_generation_locks: Dict[str, threading.Lock] = {}
+_persona_generation_locks: Dict[str, threading.RLock] = {}
 _locks_meta_lock = threading.Lock()
 _cached_agents_by_scenario: Dict[str, List[AgentModel]] = {}
 
-def _get_scenario_lock(scen_id: str) -> threading.Lock:
+def _get_scenario_lock(scen_id: str) -> threading.RLock:
     with _locks_meta_lock:
         if scen_id not in _persona_generation_locks:
-            _persona_generation_locks[scen_id] = threading.Lock()
+            _persona_generation_locks[scen_id] = threading.RLock()
         return _persona_generation_locks[scen_id]
 
 class PersonaService:

@@ -69,36 +69,51 @@ def detect_provider_from_key(key: str, default_provider: str = "gemini") -> str:
 _cached_api_keys: Optional[List[Dict[str, str]]] = None
 _cached_api_keys_time: float = 0.0
 
-def get_active_api_keys() -> List[Dict[str, str]]:
+def get_active_api_keys(user_id: Optional[str] = None) -> List[Dict[str, str]]:
     """
-    Retrieves all active API keys from the SQLite/PostgreSQL database and environment configuration.
+    Retrieves all active API keys from the database (decrypting strictly in memory using Fernet)
+    and environment configuration.
     Cached for 10 seconds to eliminate redundant DB roundtrips during concurrent agent deliberations.
     Returns list of dicts: [{'provider': 'groq', 'key': 'gsk_...'}, ...]
     """
     global _cached_api_keys, _cached_api_keys_time
     now = time.time()
-    if _cached_api_keys is not None and (now - _cached_api_keys_time < 10.0):
+    if user_id is None and _cached_api_keys is not None and (now - _cached_api_keys_time < 10.0):
         return _cached_api_keys
 
+    from app.core.security import decrypt_api_key
+    from app.storage.database import execute_query
     keys_list: List[Dict[str, str]] = []
     
-    # 1. Fetch DB stored keys first (primary keys first)
+    # 1. Fetch DB stored keys first (primary keys first, user-scoped if user_id given)
     try:
         conn = get_db_connection()
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT provider, api_key FROM api_keys WHERE status IN ('VERIFIED', 'UNCHECKED', 'UNVERIFIED') OR is_primary = 1 ORDER BY is_primary DESC, created_at DESC")
-            db_rows = cursor.fetchall()
+            if user_id:
+                execute_query(
+                    cursor,
+                    "SELECT provider, api_key FROM api_keys WHERE (user_id = ? OR user_id IS NULL) AND (status IN ('VERIFIED', 'UNCHECKED', 'UNVERIFIED') OR is_primary = 1) ORDER BY is_primary DESC, created_at DESC",
+                    (user_id,)
+                )
+            else:
+                execute_query(
+                    cursor,
+                    "SELECT provider, api_key FROM api_keys WHERE status IN ('VERIFIED', 'UNCHECKED', 'UNVERIFIED') OR is_primary = 1 ORDER BY is_primary DESC, created_at DESC"
+                )
+            db_rows = cursor.fetchall() or []
         finally:
             conn.close()
 
         for r in db_rows:
             d = dict(r)
-            k_str = (d.get("api_key") or "").strip()
-            if k_str and k_str != "mock_key_for_dev":
-                p_str = detect_provider_from_key(k_str, d.get("provider", "gemini"))
-                if not any(item["key"] == k_str for item in keys_list):
-                    keys_list.append({"provider": p_str, "key": k_str})
+            stored_val = (d.get("api_key") or "").strip()
+            if stored_val and stored_val != "mock_key_for_dev":
+                # Decrypt strictly in memory right before LLM dispatch
+                decrypted_k = decrypt_api_key(stored_val)
+                p_str = detect_provider_from_key(decrypted_k, d.get("provider", "gemini"))
+                if not any(item["key"] == decrypted_k for item in keys_list):
+                    keys_list.append({"provider": p_str, "key": decrypted_k})
     except Exception as e:
         logger.warning(f"[LLMClient] Failed loading stored API keys from DB: {e}")
 

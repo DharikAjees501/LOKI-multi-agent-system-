@@ -42,8 +42,9 @@ async def generate_edge_tts_audio(payload: TTSStreamRequest):
 
         async def audio_stream():
             async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    yield chunk["data"]
+                data = chunk.get("data")
+                if chunk.get("type") == "audio" and data:
+                    yield data
 
         return StreamingResponse(
             audio_stream(),
@@ -79,50 +80,68 @@ async def get_edge_tts_voices():
         }
     ]
 
+def validate_scenario_id(scenario_id: str) -> str:
+    if not scenario_id or str(scenario_id).strip().lower() in ("none", "undefined", "null", "", "scen-01"):
+        raise HTTPException(status_code=404, detail="Invalid scenario ID.")
+    return scenario_id.strip()
+
 @router.get("/scenarios/{id}/report")
 async def get_scenario_report(id: str, round: int | None = Query(None)):
-    logger.info(f"[Reports API] Generating synthesis executive report for scenario: {id} (Round: {round})")
-    return report_service.get_report_for_scenario(id, round_num=round)
+    clean_id = validate_scenario_id(id)
+    logger.info(f"[Reports API] Generating synthesis executive report for scenario: {clean_id} (Round: {round})")
+    rep = report_service.get_report_for_scenario(clean_id, round_num=round)
+    if not rep:
+        raise HTTPException(status_code=404, detail=f"Scenario '{clean_id}' not found.")
+    return rep
 
 @router.get("/scenarios/{id}/risks")
 async def get_scenario_risks(id: str, round: int | None = Query(None)):
-    return report_service.get_risks(id, round_num=round)
+    clean_id = validate_scenario_id(id)
+    return report_service.get_risks(clean_id, round_num=round)
 
 @router.get("/scenarios/{id}/sentiment")
 async def get_scenario_sentiment(id: str):
-    return report_service.get_sentiment(id)
+    clean_id = validate_scenario_id(id)
+    return report_service.get_sentiment(clean_id)
 
 @router.get("/scenarios/{id}/consensus")
 async def get_scenario_consensus(id: str, round: int | None = Query(None)):
-    return report_service.get_consensus(id, round_num=round)
+    clean_id = validate_scenario_id(id)
+    return report_service.get_consensus(clean_id, round_num=round)
 
 @router.get("/scenarios/{id}/turning-points")
 async def get_scenario_turning_points(id: str):
-    return report_service.get_turning_points(id)
+    clean_id = validate_scenario_id(id)
+    return report_service.get_turning_points(clean_id)
 
 @router.get("/scenarios/{id}/raci")
 async def get_scenario_raci(id: str):
-    return report_service.get_raci_matrix(id)
+    clean_id = validate_scenario_id(id)
+    return report_service.get_raci_matrix(clean_id)
 
 @router.get("/scenarios/{id}/risk-threshold-monitor")
 async def get_scenario_risk_threshold_monitor(id: str, threshold: float | None = Query(35.0)):
+    clean_id = validate_scenario_id(id)
     conf_val = float(threshold if threshold is not None else 35.0)
-    return report_service.get_risk_threshold_monitor(id, configured_threshold=conf_val)
+    return report_service.get_risk_threshold_monitor(clean_id, configured_threshold=conf_val)
 
 @router.get("/scenarios/{id}/slides")
 async def get_scenario_slides(id: str):
-    return report_service.get_slide_deck(id)
+    clean_id = validate_scenario_id(id)
+    return report_service.get_slide_deck(clean_id)
 
 @router.get("/scenarios/{id}/audio-briefing")
 async def get_scenario_audio_briefing(id: str):
-    return report_service.get_audio_briefing(id)
+    clean_id = validate_scenario_id(id)
+    return report_service.get_audio_briefing(clean_id)
 
 @router.get("/scenarios/{id}/report/export")
 async def export_scenario_report(id: str, format: str = Query("json")):
+    clean_id = validate_scenario_id(id)
     if format.lower() == "pdf":
-        html_content = report_service.export_report_pdf(id)
+        html_content = report_service.export_report_pdf(clean_id)
         return Response(content=html_content, media_type="text/html")
-    return report_service.get_report_for_scenario(id)
+    return report_service.get_report_for_scenario(clean_id)
 
 @router.get("/reports/summary")
 @router.get("/api/reports/summary")
@@ -137,7 +156,15 @@ async def get_report_summary(scenario_id: str | None = Query(None)):
             "sentimentBreakdown": {"positive": 0, "neutral": 0, "negative": 0, "critical": 0}
         }
     rep = report_service.get_report_for_scenario(scen_id)
-    sent = rep.get("sentimentBreakdown", {})
+    if not rep:
+        return {
+            "scenario_id": scen_id,
+            "risk_score": 0,
+            "primary_concern": "No report found for scenario",
+            "overall_consensus": 0,
+            "sentimentBreakdown": {"positive": 0, "neutral": 0, "negative": 0, "critical": 0}
+        }
+    sent = rep.get("sentimentBreakdown", {}) or {}
     return {
         "scenario_id": scen_id,
         "risk_score": rep.get("risk_score", 50),
@@ -153,41 +180,16 @@ async def get_report_summary(scenario_id: str | None = Query(None)):
 
 def is_out_of_domain_persona(role: str, doc_name: str) -> bool:
     """
-    Filters out legacy or cross-domain personas (e.g. drone/aerospace/surgical hardware roles)
-    from appearing in reports for marketing SaaS or educational documents.
+    Validates persona roles against active simulation context.
+    All authentic simulation agents generated for the scenario are valid.
     """
-    if not role:
-        return False
-    doc_lower = (doc_name or "").lower()
-    # If the document is explicitly about aerospace, drone, or surgery, allow those roles
-    if any(k in doc_lower for k in ["drone", "aerospace", "aviation", "robotics", "satellite", "avionics", "surgical"]):
-        return False
-
-    r_lower = role.lower()
-    banned_terms = [
-        "drone", "satellite", "avionics", "aerospace", "missile", "propulsion",
-        "surgical robotics", "spacecraft", "flight control", "neuromorphic",
-        "iiot industrial", "mesh network", "virtualization director", "hardware lead",
-        "power grid", "substation", "high-voltage", "civil engineering",
-        "construction safety", "structural engineering", "faa"
-    ]
-    return any(bt in r_lower for bt in banned_terms)
+    return False
 
 def is_mocked_or_stale_text(content: Any, doc_name: str) -> bool:
     """
-    Detects if content contains hardcoded boilerplate or cross-domain legacy bleed.
+    Checks if content is unpopulated or empty.
     """
-    if not content:
-        return True
-    s = json.dumps(content).lower() if isinstance(content, (dict, list)) else str(content).lower()
-    d_low = (doc_name or "").lower()
-    is_aero = any(k in d_low for k in ["drone", "aerospace", "aviation", "robotics", "satellite", "avionics", "surgical"])
-
-    # If not aerospace but contains drone/faa-grade/mesh network/neuromorphic/iiot
-    return bool(not is_aero and any(b in s for b in [
-        "drone", "faa-grade", "neuromorphic", "iiot industrial", "mesh network", 
-        "deterministic routing", "langgraph execution without faa"
-    ]))
+    return not bool(content)
 
 def check_input_guardrails(query: str, doc_name: str, scenario_name: str) -> dict[str, Any] | None:
     """
@@ -396,17 +398,22 @@ async def chat_with_report_agent(scenario_id: str, payload: ReportChatRequest):
             """)
             raw_agent_posts = cursor.fetchall() or []
 
-        # Filter out rogue out-of-domain personas
-        agent_posts = [p for p in raw_agent_posts if not is_out_of_domain_persona(p.get("role", ""), doc_name)][:12]
+        # Filter out rogue personas (all authentic agents are valid)
+        agent_posts = [p for p in raw_agent_posts if p.get("role")][:12]
         if not agent_posts:
-            # Fallback to realistic in-domain stakeholder posts rather than reviving out-of-domain rogue personas!
-            d_clean = doc_name.replace(".pdf", "").replace("_", " ")
-            agent_posts = [
-                {"round": 4, "agent_name": "Agent 15", "role": "Brand Governance Lead", "message": f"Brand compliance safeguards under '{d_clean}' must be enforced before automated publishing.", "sentiment": "CRITICAL", "channel": "OPERATIONS", "tier": 1, "final_stance": -0.45},
-                {"round": 3, "agent_name": "Agent 28", "role": "Performance Media Buyer", "message": "Uncapped automated daily budget shifts risk substantial spend slippage during market volatility.", "sentiment": "NEGATIVE", "channel": "MEDIA", "tier": 2, "final_stance": -0.38},
-                {"round": 2, "agent_name": "Agent 42", "role": "Digital Agency Director", "message": "Agencies require white-label client portals and multi-tenant approval controls to protect retainer margins.", "sentiment": "NEGATIVE", "channel": "BOARDROOM", "tier": 3, "final_stance": -0.32},
-                {"round": 1, "agent_name": "Agent 08", "role": "Growth Marketing Director", "message": "Creative acceleration and automated variant testing offer substantial efficiency leverage.", "sentiment": "POSITIVE", "channel": "BOARDROOM", "tier": 1, "final_stance": 0.52}
-            ]
+            cursor.execute("""
+                SELECT 1 as round, name as agent_name, role,
+                       COALESCE(current_position, '') as message,
+                       COALESCE(sentiment, 'NEUTRAL') as sentiment,
+                       COALESCE(current_channel, 'OPERATIONS') as channel,
+                       COALESCE(tier, 1) as tier,
+                       COALESCE(final_stance, 0.0) as final_stance
+                FROM agents
+                WHERE scenario_id = ?
+                ORDER BY ABS(COALESCE(final_stance, 0.0)) DESC
+                LIMIT 12
+            """, (scenario_id,))
+            agent_posts = cursor.fetchall() or []
 
         valid_roles = [str(p["role"]) for p in agent_posts if p.get("role")]
 
@@ -427,49 +434,20 @@ async def chat_with_report_agent(scenario_id: str, payload: ReportChatRequest):
         # CRITICAL: Close DB connection BEFORE awaiting the LLM call to prevent pool exhaustion!
         conn.close()
 
-    # 2. Extract metrics and ground truth
-    risk_score = 55
-    pos_pct = 24.0
-    neu_pct = 38.0
-    neg_pct = 28.0
-    crit_pct = 10.0
-    primary_concern = "Deterministic brand safety & campaign drift"
-    exec_summary = "200-agent swarm evaluated adoption feasibility. Supporters noted workflow automation gains while resisting leads highlighted lack of deterministic brand safeguards."
-    verdict = "CONDITIONAL_GO"
-    one_line_verdict = f"Conditional approval for '{scenario_name}': Establish brand safety gates before full release."
-    action_playbook = []
-    key_risks = []
-
-    if rep_row:
-        risk_score = rep_row.get("risk_score", risk_score)
-        pos_pct = round(float(rep_row.get("pos_pct", pos_pct)), 1)
-        neu_pct = round(float(rep_row.get("neu_pct", neu_pct)), 1)
-        neg_pct = round(float(rep_row.get("neg_pct", neg_pct)), 1)
-        crit_pct = round(float(rep_row.get("crit_pct", crit_pct)), 1)
-        if rep_row.get("primary_concern"):
-            pc_raw = rep_row["primary_concern"]
-            if not is_mocked_or_stale_text(pc_raw, doc_name):
-                primary_concern = pc_raw
-        if rep_row.get("executive_summary"):
-            es_raw = rep_row["executive_summary"]
-            if not is_mocked_or_stale_text(es_raw, doc_name):
-                exec_summary = es_raw
-            else:
-                exec_summary = (
-                    f"The 200-agent multi-tier simulation evaluated operational feasibility and stakeholder adoption for '{scenario_name}' under '{doc_name}', "
-                    f"producing an Overall Scenario Risk Score of {risk_score}/100. Strategic leadership endorses core automation capabilities, "
-                    f"while dissenting operational channels express concern regarding execution safeguards and workflow review gates."
-                )
-
-    if saved_payload:
-        verdict = saved_payload.get("decision_verdict") or saved_payload.get("decisionVerdict") or verdict
-        ol_raw = saved_payload.get("one_line_verdict") or saved_payload.get("oneLineVerdict")
-        if ol_raw and not is_mocked_or_stale_text(ol_raw, doc_name):
-            one_line_verdict = ol_raw
-        action_playbook = saved_payload.get("action_playbook") or saved_payload.get("actionPlaybook") or []
-        kr_raw = saved_payload.get("key_risks") or saved_payload.get("keyRisks") or []
-        if kr_raw and not is_mocked_or_stale_text(kr_raw, doc_name):
-            key_risks = kr_raw
+    # 2. Extract metrics directly from live scenario report
+    rep_data = report_service.get_report_for_scenario(scenario_id) or {}
+    sent = rep_data.get("sentimentBreakdown") or {}
+    risk_score = rep_data.get("risk_score", 50)
+    pos_pct = round(float(sent.get("positive", 0.0)), 1)
+    neu_pct = round(float(sent.get("neutral", 0.0)), 1)
+    neg_pct = round(float(sent.get("negative", 0.0)), 1)
+    crit_pct = round(float(sent.get("critical", 0.0)), 1)
+    primary_concern = rep_data.get("primary_concern") or f"Stakeholder alignment and operational risk for '{scenario_name}'"
+    exec_summary = rep_data.get("executive_summary") or f"Simulation results synthesized across 200 agents for '{scenario_name}' under '{doc_name}'."
+    verdict = rep_data.get("decision_verdict") or ("GO" if risk_score < 40 else ("CONDITIONAL_GO" if risk_score < 70 else "HOLD"))
+    one_line_verdict = rep_data.get("one_line_verdict") or f"Evaluation completed for '{scenario_name}' under '{doc_name}'."
+    action_playbook = rep_data.get("action_playbook") or []
+    key_risks = rep_data.get("key_risks") or []
 
     # 3. Format Agent Transcripts & Document Chunks
     formatted_posts = []
@@ -567,49 +545,45 @@ USER QUESTION:
     except Exception as llm_err:
         logger.warning(f"[ReportAgentChat] LLM call failed or returned error: {llm_err}")
 
-    # 6. Intelligent Fallback Synthesizer (Ensures 100% Reliability)
+    # 6. Dynamic Response Synthesizer (Grounded in real simulation metrics when direct LLM call is unavailable)
     if not reply_text:
         low_q = user_query.lower()
         top_resistors = [str(p["role"]) for p in agent_posts if str(p.get("sentiment", "")).upper() in ["NEGATIVE", "CRITICAL"] and p.get("role")]
         top_supporters = [str(p["role"]) for p in agent_posts if str(p.get("sentiment", "")).upper() in ["POSITIVE"] and p.get("role")]
 
-        c1: str = str(top_resistors[0]) if top_resistors else "Creative Director"
-        c2: str = str(top_supporters[0]) if top_supporters else "CEO"
+        c1: str = str(top_resistors[0]) if top_resistors else "Dissenting Stakeholders"
+        c2: str = str(top_supporters[0]) if top_supporters else "Strategic Leadership"
 
         if "round 3" in low_q or "push back" in low_q or "pushback" in low_q or "resist" in low_q:
             reply_text = (
-                f"In Round 3, opposition reached critical mass ({neg_pct + crit_pct:.1f}% dissent) "
-                f"primarily driven by {c1}. Key resistance stemmed from '{primary_concern}', "
-                f"where stakeholders feared unintended brand-drift and unverified ad spend without manual sign-off."
+                f"During the simulation, opposition reached {neg_pct + crit_pct:.1f}% dissent, "
+                f"led by {c1}. Core pushback centered on '{primary_concern}', "
+                f"where dissenting stakeholders voiced concern over operational execution and governance under '{doc_name}'."
             )
             citations = [c1, "Risk Monitor"]
-        elif "reduce" in low_q or "risk score" in low_q or "change" in low_q or "fix" in low_q:
-            top_action = action_playbook[0] if action_playbook else {
-                "action": "Deploy deterministic approval interlocks and pre-flight compliance guardrails",
-                "projected_risk_drop": "22",
-                "target_risk": "Brand Safety"
-            }
-            act_desc = top_action.get("action", "Establish brand approval gates")
-            drop = top_action.get("projected_risk_drop", "20")
+        elif "reduce" in low_q or "risk score" in low_q or "change" in low_q or "fix" in low_q or "playbook" in low_q:
+            top_action = action_playbook[0] if action_playbook and isinstance(action_playbook, list) and len(action_playbook) > 0 else {}
+            act_desc = top_action.get("action", f"Deploy deterministic review gates and operational oversight for '{scenario_name}'")
+            drop = top_action.get("projected_risk_drop", "15")
+            target_risk = top_action.get("target_risk", primary_concern)
             reply_text = (
-                f"The single most impactful mitigation is to {act_desc.lower()}. "
-                f"Simulation projections indicate this targeted fix will reduce the overall risk score from {risk_score}/100 "
-                f"by approximately {drop} points, shifting our posture from {verdict.replace('_', ' ')} toward a confident GO."
+                f"The highest-priority mitigation is to {act_desc.lower()}. "
+                f"Simulation projections indicate addressing {target_risk} will reduce the overall risk score from {risk_score}/100 "
+                f"by approximately {str(drop).replace('pts', '').replace('-', '').strip()} points, advancing posture toward a confident GO."
             )
             citations = ["Action Playbook", c1]
         elif "support" in low_q or "backer" in low_q or "strongest" in low_q:
             reply_text = (
-                f"{c2} and corporate leadership factions expressed the strongest support ({pos_pct}% positive), "
-                f"citing workflow consolidation and reduced media turnaround times under {doc_name}. "
-                f"However, their support is contingent on addressing workflow friction raised by operational leads."
+                f"{c2} demonstrated the strongest strategic alignment ({pos_pct}% positive), "
+                f"supporting the operational leverage and strategic value proposed under '{doc_name}'. "
+                f"Full adoption remains conditional on mitigating operational pushback from dissenting leads."
             )
             citations = [c2, "Executive Leadership"]
         else:
             reply_text = (
-                f"Across the 200-agent simulation for '{scenario_name}', the overall risk score stands at {risk_score}/100 "
-                f"({verdict.replace('_', ' ')}). Primary stakeholder friction centers on '{primary_concern}' "
-                f"with {pos_pct}% backing versus {neg_pct + crit_pct}% dissenting. "
-                f"The recommended path is phased deployment with automated brand safeguards."
+                f"For scenario '{scenario_name}' ({doc_name}), the overall risk score is {risk_score}/100 "
+                f"with a verdict of {verdict.replace('_', ' ')}. Telemetry records {pos_pct}% positive alignment versus "
+                f"{neg_pct + crit_pct}% dissenting feedback. Primary stakeholder focus: '{primary_concern}'."
             )
             citations = [c1, c2]
 

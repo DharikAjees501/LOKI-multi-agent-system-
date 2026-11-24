@@ -41,12 +41,22 @@ async def check_quota_and_guard_byok(request: Request):
         if any(prefix in x_api_key for prefix in ["AIza", "AQ.", "gsk_", "sk-", "sk-ant-", "sk-or-"]) and len(x_api_key) >= 15:
             has_valid_byok = True
 
+    user = await get_optional_current_user(request)
+    if not has_valid_byok and user:
+        conn = get_db_connection()
+        try:
+            cursor = conn.cursor()
+            execute_query(cursor, "SELECT provider, api_key FROM api_keys WHERE user_id = ? AND status IN ('VERIFIED', 'UNCHECKED') LIMIT 1", (user["id"],))
+            if cursor.fetchone():
+                has_valid_byok = True
+        finally:
+            conn.close()
+
     if has_valid_byok:
-        logger.info("[Quota Guard] Valid BYOK key verified in memory. Unlimited simulation permitted.")
+        logger.info("[Quota Guard] Valid BYOK key verified in memory/vault. Unlimited simulation permitted.")
         return {"unlimited": True, "byok": True}
 
     # No BYOK key provided -> inspect session quota from HttpOnly cookie or bearer token
-    user = await get_optional_current_user(request)
     if not user:
         logger.warning("[Quota Guard] Anonymous simulation attempt without BYOK keys.")
         raise HTTPException(

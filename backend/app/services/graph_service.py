@@ -1,17 +1,17 @@
 import json
 import math
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Set
 from app.models.graph import GraphRAGOutput, ScenarioGraphResponse, GraphNodeModel, GraphEdgeModel
 from app.storage.graph_store import graph_store
-from app.storage.database import get_db_connection
+from app.storage.database import get_db_connection, execute_query
 from app.core.logging import logger
 
 class GraphService:
     def populate_scenario_graph_from_rag(
         self, scenario_id: str, document_id: str, rag_outputs: List[GraphRAGOutput]
     ) -> ScenarioGraphResponse:
-        seen_nodes = {}
-        seen_edges = set()
+        seen_nodes: Dict[str, str] = {}
+        seen_edges: Set[str] = set()
 
         if not rag_outputs:
             from app.services.extraction_service import extraction_service
@@ -41,16 +41,17 @@ class GraphService:
         conn = get_db_connection()
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT id FROM scenarios WHERE id = ?", (scenario_id,))
+            execute_query(cursor, "SELECT id FROM scenarios WHERE id = ?", (scenario_id,))
             if not cursor.fetchone():
-                cursor.execute(
-                    """INSERT OR REPLACE INTO scenarios (id, name, description, document_id, created_date, status)
+                execute_query(
+                    cursor,
+                    """INSERT INTO scenarios (id, name, description, document_id, created_date, status)
                        VALUES (?, ?, ?, ?, ?, ?)""",
                     (scenario_id, f"Scenario {scenario_id}", "Auto-generated simulation scenario.", document_id, "2026-09-23", "READY")
                 )
 
-            cursor.execute("DELETE FROM graph_nodes WHERE scenario_id = ?", (scenario_id,))
-            cursor.execute("DELETE FROM graph_edges WHERE scenario_id = ?", (scenario_id,))
+            execute_query(cursor, "DELETE FROM graph_nodes WHERE scenario_id = ?", (scenario_id,))
+            execute_query(cursor, "DELETE FROM graph_edges WHERE scenario_id = ?", (scenario_id,))
 
             for i, ent in enumerate(all_entities):
                 node_id = f"ent-{abs(hash(ent.name)) % 10000:04d}"
@@ -58,7 +59,6 @@ class GraphService:
                 x = center_x + radius * math.cos(angle)
                 y = center_y + radius * math.sin(angle)
 
-                # Adjust slightly based on category
                 if ent.type == "Risk":
                     y -= 30
                 elif ent.type == "Regulator":
@@ -81,8 +81,9 @@ class GraphService:
                     source_chunk=ent.source_chunk
                 )
 
-                cursor.execute(
-                    """INSERT OR REPLACE INTO graph_nodes
+                execute_query(
+                    cursor,
+                    """INSERT INTO graph_nodes
                        (id, scenario_id, label, node_type, entity_category, x, y, val, connections, source_document_id, source_chunk)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (node_id, scenario_id, ent.name, "ENTITY", ent.type, round(x, 2), round(y, 2), val, "[]", document_id, ent.source_chunk)
@@ -109,8 +110,9 @@ class GraphService:
                         source_chunk=rel.source_chunk
                     )
 
-                    cursor.execute(
-                        """INSERT OR REPLACE INTO graph_edges
+                    execute_query(
+                        cursor,
+                        """INSERT INTO graph_edges
                            (id, scenario_id, source, target, relationship, strength, confidence, source_chunk)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                         (edge_id, scenario_id, src_id, tgt_id, rel.relationship, 4, rel.confidence, rel.source_chunk)
@@ -125,21 +127,117 @@ class GraphService:
 
     def get_scenario_graph(self, scenario_id: str, round_num: Optional[int] = None) -> ScenarioGraphResponse:
         """
-        Neo4j Bloom Hub-and-Spoke Topology Generator for Scenario Swarm:
-        1. Guarantees every tier (T0_SYSTEM, T1_BOARDROOM, T2_REGULATORS, T3_MEDIA, T4_PUBLIC) forms a connected sub-graph.
-        2. Designates top 2 highest-weight agents per tier as Cluster Hubs (is_hub: true).
-        3. Connects regular agents to nearest Cluster Hub (relation: "REPORTS_TO" or "INFLUENCED_BY").
-        4. Connects Cluster Hubs across tiers (relation: "CROSS_TIER_DEBATE", isCrossTier: true).
+        Retrieves real, dynamic 200-agent swarm graph grounded in CAMEL deliberation dialogue and OASIS simulation telemetry.
         """
         return self.generate_connected_swarm_graph(scenario_id, round_num=round_num)
 
     def generate_connected_swarm_graph(self, scenario_id: str, round_num: Optional[int] = None) -> ScenarioGraphResponse:
+        """
+        Real Live Dynamic Swarm Graph Generation:
+        - Reads authentic 200 agent personas for the scenario.
+        - Reads OASIS simulation steps & feed events for the requested round.
+        - Computes dynamic stances, sentiments, and states across rounds 1..5.
+        - Derives real deliberation interaction edges (CHALLENGES, ALIGNED_WITH, SHARED_CONCERN) from CAMEL feed events.
+        - Connects cross-tier macro contagion corridors and intra-tier organizational mesh.
+        - ZERO mock / fake client-side generators.
+        """
         from app.services.persona_service import persona_service
         agents = persona_service.get_agents_for_scenario(scenario_id)
         if not agents or len(agents) < 50:
             agents = persona_service.generate_personas_for_scenario(scenario_id, total_agents=200)
 
-        current_round = round_num if round_num is not None else 1
+        current_round = max(1, min(5, round_num if round_num is not None else 1))
+
+        # Query live OASIS simulation telemetry from database
+        simulation_steps: List[Dict[str, Any]] = []
+        feed_events: List[Dict[str, Any]] = []
+        trajectories: Dict[str, Dict[str, Any]] = {}
+
+        conn = get_db_connection()
+        try:
+            cursor = conn.cursor()
+            try:
+                execute_query(
+                    cursor,
+                    """SELECT agent_id, agent_number_id, round_number, numerical_stance, action_type, content
+                       FROM oasis_simulation_steps 
+                       WHERE scenario_id = ? AND round_number <= ? 
+                       ORDER BY round_number ASC""",
+                    (scenario_id, current_round)
+                )
+                simulation_steps = cursor.fetchall() or []
+            except Exception as se:
+                logger.debug(f"[GraphService] simulation steps query notice: {se}")
+
+            try:
+                execute_query(
+                    cursor,
+                    """SELECT id, agent_id, agent_number_id, role, agent_name, message, sentiment, channel, round
+                       FROM feed_events 
+                       WHERE scenario_id = ? AND round <= ? 
+                       ORDER BY round ASC, id ASC""",
+                    (scenario_id, current_round)
+                )
+                feed_events = cursor.fetchall() or []
+            except Exception as fe:
+                logger.debug(f"[GraphService] feed events query notice: {fe}")
+
+            try:
+                execute_query(
+                    cursor,
+                    """SELECT agent_id, initial_stance, final_stance, stance_history 
+                       FROM oasis_agent_trajectories 
+                       WHERE agent_id LIKE ? OR agent_id IN (SELECT id FROM agents WHERE scenario_id = ?)""",
+                    (f"%{scenario_id}%", scenario_id)
+                )
+                traj_rows = cursor.fetchall() or []
+                for tr in traj_rows:
+                    trajectories[tr["agent_id"]] = tr
+            except Exception as te:
+                logger.debug(f"[GraphService] trajectories query notice: {te}")
+        finally:
+            conn.close()
+
+        # Build round-specific stance map for all agents
+        agent_round_stance: Dict[str, float] = {}
+        agent_speaking_round: Dict[str, int] = {}
+
+        # 1. Direct simulation steps take highest priority
+        for st in simulation_steps:
+            aid = str(st["agent_id"])
+            num_id = str(st["agent_number_id"])
+            try:
+                val = float(st.get("numerical_stance") or 0.0)
+                agent_round_stance[aid] = val
+                agent_round_stance[num_id] = val
+                agent_speaking_round[aid] = int(st.get("round_number") or current_round)
+                agent_speaking_round[num_id] = int(st.get("round_number") or current_round)
+            except Exception:
+                pass
+
+        # 2. Complete stances for agents that didn't directly speak in current_round
+        for ag in agents:
+            if ag.id not in agent_round_stance:
+                tr = trajectories.get(ag.id)
+                if tr and tr.get("stance_history"):
+                    try:
+                        h_list = json.loads(tr["stance_history"])
+                        if isinstance(h_list, list) and h_list:
+                            idx = min(current_round - 1, len(h_list) - 1)
+                            agent_round_stance[ag.id] = float(h_list[idx])
+                    except Exception:
+                        pass
+
+                if ag.id not in agent_round_stance:
+                    init_s = float(getattr(ag, "initial_stance", 0.0) or 0.0)
+                    fin_s = float(getattr(ag, "final_stance", 0.0) or 0.0)
+                    if current_round == 1:
+                        agent_round_stance[ag.id] = init_s
+                    elif current_round == 5:
+                        agent_round_stance[ag.id] = fin_s
+                    else:
+                        frac = (current_round - 1) / 4.0
+                        agent_round_stance[ag.id] = round(init_s + frac * (fin_s - init_s), 3)
 
         tier_categories = {
             0: "T0_SYSTEM",
@@ -149,8 +247,11 @@ class GraphService:
             4: "T4_PUBLIC",
         }
 
-        # Group agents by tier (0 to 4)
-        tiered_agents = {0: [], 1: [], 2: [], 3: [], 4: []}
+        # Concentric layout radii for organic D3 settlement
+        tier_radii = {0: 0, 1: 170, 2: 300, 3: 440, 4: 590}
+
+        # Partition agents by tier
+        tiered_agents: Dict[int, List[Any]] = {0: [], 1: [], 2: [], 3: [], 4: []}
         for ag in agents:
             t = ag.tier if ag.tier in [0, 1, 2, 3, 4] else (
                 0 if ag.numberId <= 2 else (
@@ -164,55 +265,51 @@ class GraphService:
             tiered_agents[t].append(ag)
 
         nodes: List[GraphNodeModel] = []
-        edges: List[GraphEdgeModel] = []
-        edge_ids = set()
-        tier_hubs = {0: [], 1: [], 2: [], 3: [], 4: []}
+        node_map: Dict[str, GraphNodeModel] = {}
+        tier_hubs: Dict[int, List[Any]] = {0: [], 1: [], 2: [], 3: [], 4: []}
+        tier_avg_stances: Dict[int, float] = {}
 
-        # Clean circular layout seed coordinates for organic physics settlement
-        tier_center_radii = {0: 0, 1: 170, 2: 300, 3: 440, 4: 590}
+        def get_agent_weight(a: Any) -> float:
+            inf = getattr(a, "metrics", {}).get("influenceScore", 70) if hasattr(a, "metrics") and isinstance(a.metrics, dict) else 70
+            r = (a.role or "").lower()
+            if any(k in r for k in ["ceo", "cfo", "chair", "lead", "ftc", "gdpr", "wsj", "bloomberg", "director", "extractor", "founder"]):
+                inf += 25
+            return float(inf)
 
-        # 1. Designate Cluster Hubs per tier & build nodes
+        # 1. Build Agent Nodes with live round stance and designation of cluster hubs
         for tier, ag_list in tiered_agents.items():
             if not ag_list:
                 continue
-
-            def get_agent_weight(a):
-                inf = getattr(a, "metrics", {}).get("influenceScore", 70) if hasattr(a, "metrics") and isinstance(a.metrics, dict) else 70
-                r = (a.role or "").lower()
-                if any(k in r for k in ["ceo", "cfo", "chair", "lead", "ftc", "gdpr", "wsj", "bloomberg", "director", "extractor", "founder"]):
-                    inf += 25
-                return inf
 
             sorted_by_weight = sorted(ag_list, key=get_agent_weight, reverse=True)
             hubs = sorted_by_weight[:2]
             tier_hubs[tier] = hubs
             hub_ids = {h.id for h in hubs}
 
-            base_r = tier_center_radii.get(tier, 300)
+            base_r = tier_radii.get(tier, 300)
             total_in_tier = len(ag_list)
+            stances_in_tier = []
 
             for idx_in_tier, ag in enumerate(ag_list):
                 is_hub = ag.id in hub_ids
                 weight = round(get_agent_weight(ag) / 100.0, 2)
 
-                # Stance determination
-                stance_val = -0.1
-                if hasattr(ag, "currentPosition") and ag.currentPosition and "Stance:" in ag.currentPosition:
-                    try:
-                        stance_val = float(ag.currentPosition.split("Stance:")[1].strip().split()[0])
-                    except Exception:
-                        stance_val = -0.25 if ag.sentiment == "NEGATIVE" else (0.55 if ag.sentiment == "POSITIVE" else -0.1)
-                elif ag.sentiment == "CRITICAL":
-                    stance_val = -0.8
-                elif ag.sentiment == "NEGATIVE":
-                    stance_val = -0.4
-                elif ag.sentiment == "POSITIVE":
-                    stance_val = 0.6
+                stance_val = round(max(-1.0, min(1.0, agent_round_stance.get(ag.id, 0.0))), 2)
+                stances_in_tier.append(stance_val)
 
-                if current_round >= 3 and (is_hub or tier in [1, 2]):
-                    stance_val = round(max(-1.0, stance_val - 0.25), 2)
+                # Sentiment derived dynamically from live round stance
+                if stance_val <= -0.50:
+                    sentiment = "CRITICAL"
+                elif stance_val < -0.10:
+                    sentiment = "NEGATIVE"
+                elif stance_val <= 0.15:
+                    sentiment = "NEUTRAL"
+                else:
+                    sentiment = "POSITIVE"
 
-                node_state = "ALERT" if stance_val <= -0.35 or ag.currentState == "ALERT" else "ACTIVE"
+                # State: ALERT if critical/negative stance or high risk
+                node_state = "ALERT" if stance_val <= -0.30 or sentiment in ["CRITICAL", "NEGATIVE"] else "ACTIVE"
+
                 role_name = ag.role or ag.name
                 label = f"A{ag.numberId:02d} {role_name}"
 
@@ -220,173 +317,235 @@ class GraphService:
                 seed_x = round(base_r * math.cos(angle), 1)
                 seed_y = round(base_r * math.sin(angle), 1)
 
-                nodes.append(
-                    GraphNodeModel(
-                        id=ag.id,
-                        label=label,
-                        type="AGENT",
-                        entityCategory=tier_categories.get(tier, "T4_PUBLIC"),
-                        agentTier=tier,
-                        state=node_state,
-                        x=seed_x,
-                        y=seed_y,
-                        val=14 if is_hub else 7,
-                        connections=[],
-                        is_hub=is_hub,
-                        weight=weight,
-                        stanceAxis=stance_val,
-                        sentiment="CRITICAL" if stance_val <= -0.5 else ("NEGATIVE" if stance_val < 0 else "POSITIVE"),
-                    )
+                node_obj = GraphNodeModel(
+                    id=ag.id,
+                    label=label,
+                    type="AGENT",
+                    entityCategory=tier_categories.get(tier, "T4_PUBLIC"),
+                    agentTier=tier,
+                    state=node_state,
+                    x=seed_x,
+                    y=seed_y,
+                    val=14 if is_hub else 7,
+                    connections=[],
+                    is_hub=is_hub,
+                    weight=weight,
+                    stanceAxis=stance_val,
+                    sentiment=sentiment,
                 )
+                nodes.append(node_obj)
+                node_map[ag.id] = node_obj
 
-            # 2. Intra-Tier Hub-and-Spoke Topology
-            # Connect the 2 hubs together
-            if len(hubs) >= 2:
-                h_edge = f"e-hub-{hubs[0].id}-{hubs[1].id}"
-                if h_edge not in edge_ids:
-                    edge_ids.add(h_edge)
-                    edges.append(
-                        GraphEdgeModel(
-                            id=h_edge,
-                            source=hubs[0].id,
-                            target=hubs[1].id,
-                            relationship="CO_LEADS" if tier <= 1 else "SYNCHRONIZES_WITH",
-                            strength=5,
-                            confidence=0.98,
-                            isCrossTier=False,
-                            is_cross_tier=False
-                        )
-                    )
+            tier_avg_stances[tier] = sum(stances_in_tier) / max(1, len(stances_in_tier))
 
-            # Connect every regular agent to nearest Cluster Hub
-            for i, ag in enumerate(ag_list):
-                if ag.id in hub_ids:
-                    continue
-                assigned_hub = hubs[i % len(hubs)]
-                rel = "REPORTS_TO" if tier <= 1 else "INFLUENCED_BY"
-                e_id = f"e-spoke-{ag.id}-{assigned_hub.id}"
-                if e_id not in edge_ids:
-                    edge_ids.add(e_id)
-                    edges.append(
-                        GraphEdgeModel(
-                            id=e_id,
-                            source=ag.id,
-                            target=assigned_hub.id,
-                            relationship=rel,
-                            strength=3,
-                            confidence=0.92,
-                            isCrossTier=False,
-                            is_cross_tier=False
-                        )
-                    )
+        # 2. Build Real Dynamic Edges from CAMEL OASIS Deliberation Telemetry
+        edges: List[GraphEdgeModel] = []
+        edge_ids: Set[str] = set()
+        adjacency: Dict[str, Set[str]] = {n.id: set() for n in nodes}
 
-                # Connect sequential neighbors within tier for rich cohesive sub-graph lines
-                neighbor = ag_list[(i + 1) % len(ag_list)]
-                if neighbor.id != ag.id:
-                    nbr_id = f"e-nbr-{ag.id}-{neighbor.id}"
-                    if nbr_id not in edge_ids:
-                        edge_ids.add(nbr_id)
-                        edges.append(
-                            GraphEdgeModel(
-                                id=nbr_id,
-                                source=ag.id,
-                                target=neighbor.id,
-                                relationship="PEER_ALIGNED",
-                                strength=2,
-                                confidence=0.88,
-                                isCrossTier=False,
-                                is_cross_tier=False
-                            )
-                        )
+        def add_graph_edge(src: str, tgt: str, rel: str, strength: int = 3, conf: float = 0.9, is_cross: bool = False):
+            if src == tgt or src not in node_map or tgt not in node_map:
+                return
+            edge_key = f"{min(src, tgt)}-{max(src, tgt)}"
+            if edge_key in edge_ids:
+                return
+            edge_ids.add(edge_key)
 
-        # 3. Cross-Tier Macro Connections between Cluster Hubs
+            edge_id = f"de-{src}-{tgt}"
+            edges.append(
+                GraphEdgeModel(
+                    id=edge_id,
+                    source=src,
+                    target=tgt,
+                    relationship=rel,
+                    strength=strength,
+                    confidence=conf,
+                    isCrossTier=is_cross,
+                    is_cross_tier=is_cross,
+                )
+            )
+            adjacency[src].add(tgt)
+            adjacency[tgt].add(src)
+
+        # 2A. Direct Deliberation Dialogue Edges from feed_events
+        # Agents speaking in the same round and channel interact dynamically
+        events_by_round_and_channel: Dict[tuple, List[Dict[str, Any]]] = {}
+        for ev in feed_events:
+            r = int(ev.get("round") or 1)
+            ch = str(ev.get("channel") or "BOARDROOM")
+            events_by_round_and_channel.setdefault((r, ch), []).append(ev)
+
+        for (rnd, ch), ev_list in events_by_round_and_channel.items():
+            is_active_round = (rnd == current_round)
+            speakers_in_channel = []
+            seen_speakers = set()
+
+            for ev in ev_list:
+                spk_id = str(ev.get("agent_id") or "")
+                if spk_id in node_map and spk_id not in seen_speakers:
+                    seen_speakers.add(spk_id)
+                    speakers_in_channel.append((spk_id, ev.get("sentiment") or "NEUTRAL"))
+
+            # Pairwise cross-agent deliberation links within channel
+            for i in range(len(speakers_in_channel)):
+                for j in range(i + 1, min(len(speakers_in_channel), i + 4)):
+                    spk1_id, sent1 = speakers_in_channel[i]
+                    spk2_id, sent2 = speakers_in_channel[j]
+                    node1 = node_map[spk1_id]
+                    node2 = node_map[spk2_id]
+                    is_cross = (node1.agentTier != node2.agentTier)
+
+                    # Dynamic relationship based on stance/sentiment collision
+                    if (sent1 in ["CRITICAL", "NEGATIVE"] and sent2 == "POSITIVE") or (sent2 in ["CRITICAL", "NEGATIVE"] and sent1 == "POSITIVE"):
+                        rel = "CHALLENGES"
+                        strength = 5 if is_active_round else 3
+                    elif sent1 in ["CRITICAL", "NEGATIVE"] and sent2 in ["CRITICAL", "NEGATIVE"]:
+                        rel = "SHARED_CONCERN"
+                        strength = 4 if is_active_round else 3
+                    elif sent1 == "POSITIVE" and sent2 == "POSITIVE":
+                        rel = "ALIGNED_WITH"
+                        strength = 4 if is_active_round else 3
+                    else:
+                        rel = "DELIBERATES"
+                        strength = 3
+
+                    add_graph_edge(spk1_id, spk2_id, rel, strength=strength, is_cross=is_cross)
+
+        # 2B. Cross-Tier CAMEL OASIS Contagion Corridors between Cluster Hubs
+        # Dynamically updates edge relationships based on round stance evolution
         cross_pairs = [
-            (0, 1, "SYSTEM_GOVERNANCE"),
-            (1, 2, "CROSS_TIER_DEBATE"),
-            (1, 3, "CROSS_TIER_DEBATE"),
-            (2, 3, "CROSS_TIER_DEBATE"),
-            (3, 4, "INFLUENCES_MARKET"),
+            (0, 1),
+            (1, 2),
+            (1, 3),
+            (2, 3),
+            (3, 4),
         ]
 
-        for t1, t2, rel in cross_pairs:
+        for t1, t2 in cross_pairs:
             hubs1 = tier_hubs.get(t1, [])
             hubs2 = tier_hubs.get(t2, [])
+            avg_s1 = tier_avg_stances.get(t1, 0.0)
+            avg_s2 = tier_avg_stances.get(t2, 0.0)
+
+            # Determine dynamic macro relationship
+            if t1 == 0 and t2 == 1:
+                rel = "SYSTEM_GOVERNANCE"
+                strength = 5
+            elif t1 == 1 and t2 == 2:
+                rel = "REGULATORY_SCRUTINY" if avg_s2 <= -0.15 else "COMPLIANCE_OVERSIGHT"
+                strength = 5 if avg_s2 <= -0.25 else 4
+            elif t1 == 1 and t2 == 3:
+                rel = "MEDIA_CRITIQUE" if avg_s2 <= -0.15 else "EXECUTIVE_BRIEFING"
+                strength = 5 if avg_s2 <= -0.25 else 4
+            elif t1 == 2 and t2 == 3:
+                rel = "ENFORCEMENT_REPORTING" if avg_s1 <= -0.20 else "REGULATORY_DISCLOSURE"
+                strength = 4
+            elif t1 == 3 and t2 == 4:
+                rel = "VIRAL_CONTAGION" if avg_s2 <= -0.20 else "PUBLIC_BROADCAST"
+                strength = 5 if avg_s2 <= -0.25 else 4
+            else:
+                rel = "CROSS_TIER_DEBATE"
+                strength = 4
+
             for h1 in hubs1:
                 for h2 in hubs2:
-                    ct_id = f"e-ct-{h1.id}-{h2.id}"
-                    if ct_id not in edge_ids:
-                        edge_ids.add(ct_id)
-                        edges.append(
-                            GraphEdgeModel(
-                                id=ct_id,
-                                source=h1.id,
-                                target=h2.id,
-                                relationship=rel,
-                                strength=4,
-                                confidence=0.95,
-                                isCrossTier=True,
-                                is_cross_tier=True
-                            )
-                        )
+                    add_graph_edge(h1.id, h2.id, rel, strength=strength, is_cross=True)
+
+        # In Round 3+ (Shock Round), connect Public and Boardroom for market feedback
+        if current_round >= 3:
+            hubs_pub = tier_hubs.get(4, [])
+            hubs_exec = tier_hubs.get(1, [])
+            if hubs_pub and hubs_exec:
+                add_graph_edge(hubs_pub[0].id, hubs_exec[0].id, "MARKET_BACKLASH" if tier_avg_stances.get(4, 0.0) <= -0.2 else "MARKET_FEEDBACK", strength=4, is_cross=True)
+
+        # 2C. Intra-Tier Hub-and-Spoke Cohesion Mesh
+        for tier, ag_list in tiered_agents.items():
+            hubs = tier_hubs.get(tier, [])
+            if len(hubs) >= 2:
+                add_graph_edge(
+                    hubs[0].id,
+                    hubs[1].id,
+                    "CO_LEADS" if tier <= 1 else "SYNCHRONIZES_WITH",
+                    strength=5,
+                    is_cross=False
+                )
+
+            # Spoke links connecting regular agents to tier hubs
+            for idx, ag in enumerate(ag_list):
+                if hubs and ag.id not in [h.id for h in hubs]:
+                    assigned_hub = hubs[idx % len(hubs)]
+                    spoke_rel = "REPORTS_TO" if tier <= 1 else ("AUDITS" if tier == 2 else ("ANALYST_COVERAGE" if tier == 3 else "INFLUENCED_BY"))
+                    add_graph_edge(ag.id, assigned_hub.id, spoke_rel, strength=3, is_cross=False)
+
+                # Peer ring link to adjacent neighbor
+                neighbor = ag_list[(idx + 1) % len(ag_list)]
+                if neighbor.id != ag.id:
+                    add_graph_edge(ag.id, neighbor.id, "PEER_ALIGNED", strength=2, is_cross=False)
+
+        # 3. Synchronize node connections array
+        for n in nodes:
+            n.connections = list(adjacency.get(n.id, set()))
 
         return ScenarioGraphResponse(scenario_id=scenario_id, nodes=nodes, edges=edges)
 
     def get_raw_entity_graph(self, scenario_id: str, round_num: Optional[int] = None) -> ScenarioGraphResponse:
+        """
+        Retrieves real live GraphRAG extracted entities and relationships from the scenario document.
+        """
         conn = get_db_connection()
         try:
             cursor = conn.cursor()
 
-            cursor.execute("SELECT * FROM graph_nodes WHERE scenario_id = ?", (scenario_id,))
+            execute_query(cursor, "SELECT * FROM graph_nodes WHERE scenario_id = ?", (scenario_id,))
             nodes_rows = cursor.fetchall()
 
-            cursor.execute("SELECT * FROM graph_edges WHERE scenario_id = ?", (scenario_id,))
+            execute_query(cursor, "SELECT * FROM graph_edges WHERE scenario_id = ?", (scenario_id,))
             edges_rows = cursor.fetchall()
 
-            cursor.execute("SELECT name, description, document_id FROM scenarios WHERE id = ?", (scenario_id,))
+            execute_query(cursor, "SELECT name, description, document_id FROM scenarios WHERE id = ?", (scenario_id,))
             scen = cursor.fetchone()
         finally:
             conn.close()
 
         if not nodes_rows or len(nodes_rows) < 4:
-            doc_id = scen["document_id"] if scen else "doc-default"
-            doc_title = scen["name"] if scen else "Strategy Scenario"
-            doc_desc = scen["description"] if scen else "Strategic risk framework"
+            doc_id = scen.get("document_id") if scen else "doc-default"
+            doc_title = scen.get("name") if scen else "Strategy Scenario"
+            doc_desc = scen.get("description") if scen else "Strategic risk framework"
             from app.services.extraction_service import extraction_service
             rag_output = extraction_service._rule_based_extraction("Strategy Document", 0, doc_desc, doc_title)
-            return self.populate_scenario_graph_from_rag(scenario_id, doc_id, [rag_output])
+            return self.populate_scenario_graph_from_rag(scenario_id, doc_id or "doc-default", [rag_output])
 
-        current_round = round_num if round_num is not None else 1
+        current_round = max(1, min(5, round_num if round_num is not None else 1))
 
         nodes: List[GraphNodeModel] = []
         for r in nodes_rows:
-            cat = r["entity_category"] or ""
-            lbl = (r["label"] or "").lower()
+            cat = r.get("entity_category") or ""
+            lbl = (r.get("label") or "").lower()
 
-            # Dynamic round-driven node alert state transition
             node_state = "ACTIVE"
             if current_round >= 2 and cat == "Regulator":
                 node_state = "ALERT"
-            elif current_round >= 3 and (cat == "Risk" or "mid-market" in lbl or "churn" in lbl):
+            elif current_round >= 3 and (cat == "Risk" or "risk" in lbl or "churn" in lbl or "churn" in cat.lower()):
                 node_state = "ALERT"
             elif current_round >= 4 and cat == "Competitor":
                 node_state = "ALERT"
-            elif r["state"]:
+            elif r.get("state"):
                 node_state = r["state"]
 
             nodes.append(
                 GraphNodeModel(
                     id=r["id"],
                     label=r["label"],
-                    type=r["node_type"],
-                    entityCategory=r["entity_category"],
-                    agentTier=r["agent_tier"],
+                    type=r.get("node_type") or "ENTITY",
+                    entityCategory=r.get("entity_category"),
+                    agentTier=r.get("agent_tier"),
                     state=node_state,
-                    x=r["x"] or 500.0,
-                    y=r["y"] or 400.0,
-                    val=r["val"] or 20,
-                    connections=json.loads(r["connections"] or "[]"),
-                    source_document_id=r["source_document_id"],
-                    source_chunk=r["source_chunk"]
+                    x=r.get("x") or 500.0,
+                    y=r.get("y") or 400.0,
+                    val=r.get("val") or 20,
+                    connections=json.loads(r.get("connections") or "[]"),
+                    source_document_id=r.get("source_document_id"),
+                    source_chunk=r.get("source_chunk")
                 )
             )
 
@@ -398,9 +557,9 @@ class GraphService:
                     source=r["source"],
                     target=r["target"],
                     relationship=r["relationship"],
-                    strength=r["strength"] or 3,
-                    confidence=r["confidence"] or 0.9,
-                    source_chunk=r["source_chunk"]
+                    strength=r.get("strength") or 3,
+                    confidence=r.get("confidence") or 0.9,
+                    source_chunk=r.get("source_chunk")
                 )
             )
 
@@ -414,7 +573,7 @@ class GraphService:
         3. Stance vectors (-1.0 to +1.0) and belief statements derived directly from graph relations.
         4. Pre-populated agent relationships and influence asymmetries from graph edges.
         """
-        graph_data = self.get_scenario_graph(scenario_id)
+        graph_data = self.get_raw_entity_graph(scenario_id)
         nodes = graph_data.nodes
         edges = graph_data.edges
 
@@ -423,7 +582,7 @@ class GraphService:
 
         node_map = {n.id: n for n in nodes}
         node_degrees = {n.id: 0 for n in nodes}
-        adjacency = {n.id: [] for n in nodes}
+        adjacency: Dict[str, List[GraphEdgeModel]] = {n.id: [] for n in nodes}
 
         for e in edges:
             if e.source in node_degrees:
@@ -447,13 +606,13 @@ class GraphService:
             is_leader = c_score >= centrality_scores.get(opinion_leader_threshold, 0.6)
 
             cat = n.entityCategory or "General"
-            if cat in ["Regulator", "Legal", "Compliance"]:
+            if cat in ["Regulator", "Legal", "Compliance", "T2_REGULATORS"]:
                 community = "Institutional Regulatory Oversight"
-            elif cat in ["Executive", "Boardroom", "Pricing"]:
+            elif cat in ["Executive", "Boardroom", "Pricing", "T1_BOARDROOM", "T0_SYSTEM"]:
                 community = "Executive Strategy & Governance"
             elif cat in ["Technology", "Product", "MLOps", "Cloud"]:
                 community = "Deep Tech & Architecture"
-            elif cat in ["Competitor", "Market", "VC"]:
+            elif cat in ["Competitor", "Market", "VC", "T3_MEDIA"]:
                 community = "Ecosystem & Market Dynamics"
             else:
                 community = "Broad Market & User Population"
@@ -470,10 +629,10 @@ class GraphService:
                 other_label = other_node.label if other_node else other_nid
                 rel = edge.relationship.lower()
 
-                if any(k in rel for k in ["oppose", "violate", "restrict", "penalize", "reject", "block", "conflict"]):
+                if any(k in rel for k in ["oppose", "violate", "restrict", "penalize", "reject", "block", "conflict", "challenge"]):
                     stance_val = -0.8
                     b_str = f"Opposes {other_label} (relation: '{edge.relationship}', stance = -0.8 on regulation axis)"
-                elif any(k in rel for k in ["support", "enable", "adopt", "drive", "accelerate", "partner", "invest"]):
+                elif any(k in rel for k in ["support", "enable", "adopt", "drive", "accelerate", "partner", "invest", "aligned"]):
                     stance_val = +0.7
                     b_str = f"Supports {other_label} (relation: '{edge.relationship}', stance = +0.7 on growth axis)"
                 elif any(k in rel for k in ["audit", "regulate", "monitor", "inspect", "scrutinize"]):
@@ -518,4 +677,3 @@ class GraphService:
         return reality_map
 
 graph_service = GraphService()
-

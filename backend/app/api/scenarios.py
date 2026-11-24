@@ -22,13 +22,13 @@ router = APIRouter(prefix="/scenarios", tags=["scenarios"])
 @router.post("", response_model=ScenarioModel)
 async def create_scenario(
     payload: ScenarioCreate,
-    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     logger.info(f"[Scenarios API] Creating new scenario: '{payload.name}'")
     scen_id = f"scen-{uuid.uuid4().hex[:6]}"
     created_date = datetime.datetime.now().strftime("%Y-%m-%d")
 
-    user_id = current_user.get("id") if current_user else payload.user_id
+    user_id = current_user["id"]
 
     conn = get_db_connection()
     try:
@@ -46,7 +46,6 @@ async def create_scenario(
         id=scen_id,
         name=payload.name,
         description=payload.description,
-        document_id=payload.document_id or "",
         documentName=payload.document_id or "No document loaded",
         createdDate=created_date,
         lastSimulation="Never",
@@ -65,7 +64,7 @@ class CreateAndRunScenarioRequest(BaseModel):
 @router.post("/create-and-run")
 async def create_and_run_scenario(
     payload: CreateAndRunScenarioRequest,
-    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     logger.info(f"[Scenarios API] Creating and running isolated scenario: '{payload.name}'")
     scen_id = f"scen-{uuid.uuid4().hex[:6]}"
@@ -73,7 +72,7 @@ async def create_and_run_scenario(
     title = payload.name.strip() or "Strategic Scenario"
     desc = payload.description or "Evaluate strategic risk and stakeholder alignment"
     doc_id = payload.document_id or "doc-default"
-    user_id = current_user.get("id") if current_user else None
+    user_id = current_user["id"]
 
     conn = get_db_connection()
     try:
@@ -185,13 +184,28 @@ async def get_scenario(
 async def get_scenario_graph_endpoint(
     id: str,
     round: Optional[int] = Query(None),
+    type: Optional[str] = Query(None),
     current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
 ):
     if not id or id == "scen-01":
         return ScenarioGraphResponse(scenario_id="", nodes=[], edges=[])
     user_id = current_user.get("id") if current_user else None
     verify_scenario_access(id, user_id)
+    if type in ["knowledge", "entities", "rag"]:
+        return graph_service.get_raw_entity_graph(id, round_num=round)
     return graph_service.get_scenario_graph(id, round_num=round)
+
+@router.get("/{id}/knowledge-graph", response_model=ScenarioGraphResponse)
+async def get_scenario_knowledge_graph_endpoint(
+    id: str,
+    round: Optional[int] = Query(None),
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
+    if not id or id == "scen-01":
+        return ScenarioGraphResponse(scenario_id="", nodes=[], edges=[])
+    user_id = current_user.get("id") if current_user else None
+    verify_scenario_access(id, user_id)
+    return graph_service.get_raw_entity_graph(id, round_num=round)
 
 @router.post("/{id}/extract")
 async def extract_scenario_graph(

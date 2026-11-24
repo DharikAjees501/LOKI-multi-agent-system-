@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "./baseUrl";
+import { keyService } from "./keyService";
 
 export interface SavedScenarioItem {
   id: string;
@@ -35,6 +36,12 @@ export interface User {
   last_login_at?: string;
   saved_scenarios?: SavedScenarioItem[];
   saved_documents?: SavedDocumentItem[];
+  api_key_status?: {
+    provider: string;
+    masked_key: string;
+    is_connected: boolean;
+    status?: string;
+  };
 }
 
 export interface AuthResponse {
@@ -121,6 +128,12 @@ class AuthService {
         localStorage.setItem("LOKI_CURRENT_ROUND", "5");
         localStorage.setItem("SWARMLENS_SIM_STATUS", "COMPLETED");
         localStorage.setItem("LOKI_SIM_STATUS", "COMPLETED");
+      } else if (["RUNNING", "RUNNING_BASELINE", "RUNNING_WHAT_IF"].includes(latestScen.status || "")) {
+        localStorage.setItem("SWARMLENS_SIM_STATUS", "RUNNING");
+        localStorage.setItem("LOKI_SIM_STATUS", "RUNNING");
+      } else {
+        localStorage.setItem("SWARMLENS_SIM_STATUS", "READY");
+        localStorage.setItem("LOKI_SIM_STATUS", "READY");
       }
     } else {
       // First-time or new user: ensure clean empty workspace
@@ -137,6 +150,9 @@ class AuthService {
       localStorage.setItem("SWARMLENS_SIM_STATUS", "IDLE");
       localStorage.setItem("LOKI_SIM_STATUS", "IDLE");
     }
+
+    // Rehydrate user's active API keys from encrypted vault
+    keyService.fetchUserKeys().catch(() => {});
 
     window.dispatchEvent(new Event("loki_auth_updated"));
     window.dispatchEvent(new Event("swarmlens_auth_updated"));
@@ -164,6 +180,7 @@ class AuthService {
       localStorage.setItem("LOKI_CURRENT_ROUND", "1");
       localStorage.setItem("SWARMLENS_SIM_STATUS", "IDLE");
       localStorage.setItem("LOKI_SIM_STATUS", "IDLE");
+      keyService.clearAllKeys().catch(() => {});
       window.dispatchEvent(new Event("loki_auth_updated"));
       window.dispatchEvent(new Event("swarmlens_auth_updated"));
     }
@@ -193,6 +210,50 @@ class AuthService {
         const user: User = await res.json();
         if (typeof window !== "undefined") {
           localStorage.setItem(USER_KEY, JSON.stringify(user));
+
+          // Auto-rehydrate workspace from saved scenarios on returning profile load
+          if (user.saved_scenarios && user.saved_scenarios.length > 0) {
+            const currentActiveId = localStorage.getItem("SWARMLENS_ACTIVE_SCENARIO_ID") || localStorage.getItem("LOKI_ACTIVE_SCENARIO_ID");
+            if (!currentActiveId) {
+              const latestScen = user.saved_scenarios[0];
+              const docName =
+                (user.saved_documents && user.saved_documents.length > 0
+                  ? user.saved_documents[0].filename
+                  : null) ||
+                (latestScen as any).document_id ||
+                `${latestScen.name.replace(/\s+/g, "_")}.pdf`;
+
+              localStorage.setItem("SWARMLENS_ACTIVE_SCENARIO_ID", latestScen.id);
+              localStorage.setItem("LOKI_ACTIVE_SCENARIO_ID", latestScen.id);
+              localStorage.setItem("SWARMLENS_ACTIVE_SCENARIO_NAME", latestScen.name);
+              localStorage.setItem("LOKI_ACTIVE_SCENARIO_NAME", latestScen.name);
+              localStorage.setItem("SWARMLENS_ACTIVE_DOC_NAME", docName);
+              localStorage.setItem("LOKI_ACTIVE_DOC_NAME", docName);
+              if (latestScen.description) {
+                localStorage.setItem("SWARMLENS_ACTIVE_SCENARIO_DESC", latestScen.description);
+                localStorage.setItem("LOKI_ACTIVE_SCENARIO_DESC", latestScen.description);
+              }
+              if (["COMPLETED", "BASELINE_COMPLETED", "WHAT_IF_COMPLETED"].includes(latestScen.status || "")) {
+                localStorage.setItem("SWARMLENS_CURRENT_ROUND", "5");
+                localStorage.setItem("LOKI_CURRENT_ROUND", "5");
+                localStorage.setItem("SWARMLENS_SIM_STATUS", "COMPLETED");
+                localStorage.setItem("LOKI_SIM_STATUS", "COMPLETED");
+              } else if (["RUNNING", "RUNNING_BASELINE", "RUNNING_WHAT_IF"].includes(latestScen.status || "")) {
+                localStorage.setItem("SWARMLENS_SIM_STATUS", "RUNNING");
+                localStorage.setItem("LOKI_SIM_STATUS", "RUNNING");
+              } else {
+                localStorage.setItem("SWARMLENS_SIM_STATUS", "READY");
+                localStorage.setItem("LOKI_SIM_STATUS", "READY");
+              }
+              localStorage.removeItem("SWARMLENS_MANUALLY_CLEARED");
+              window.dispatchEvent(new Event("swarmlens_doc_updated"));
+              window.dispatchEvent(new Event("loki_doc_updated"));
+              window.dispatchEvent(new Event("scenario_changed"));
+            }
+          }
+
+          // Hydrate user's active API keys from encrypted vault
+          keyService.fetchUserKeys().catch(() => {});
           window.dispatchEvent(new Event("loki_auth_updated"));
         }
         return user;

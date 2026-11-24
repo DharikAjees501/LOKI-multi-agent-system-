@@ -16,12 +16,12 @@ async def upload_document(
     file: UploadFile = File(...),
     scenario_title: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
-    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename cannot be empty")
 
-    user_id = current_user.get("id") if current_user else None
+    user_id = current_user["id"]
 
     safe_filename = os.path.basename(file.filename)
     ext = os.path.splitext(safe_filename)[1].lower()

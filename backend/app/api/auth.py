@@ -423,9 +423,10 @@ async def google_auth_endpoint(payload: GoogleLoginRequest, response: Response, 
 
         log_audit_event("AUTH_GOOGLE_SIGNUP", email, f"New user created via Google: {user_id}")
 
-    # Fetch existing saved scenarios & documents for returning users
+    # Fetch existing saved scenarios, documents & active key status for returning users
     saved_scenarios = []
     saved_documents = []
+    api_key_status = None
     if not is_new_user:
         conn = get_db_connection()
         try:
@@ -445,6 +446,23 @@ async def google_auth_endpoint(payload: GoogleLoginRequest, response: Response, 
             )
             doc_rows = cursor.fetchall() or []
             saved_documents = [dict(d) for d in doc_rows]
+
+            execute_query(
+                cursor,
+                "SELECT provider, api_key, status FROM api_keys WHERE user_id = ? ORDER BY is_primary DESC, created_at DESC LIMIT 1",
+                (user_id,)
+            )
+            k_row = cursor.fetchone()
+            if k_row:
+                from app.core.security import decrypt_api_key
+                from app.api.keys import mask_api_key
+                decrypted = decrypt_api_key(k_row["api_key"])
+                api_key_status = {
+                    "provider": k_row["provider"],
+                    "masked_key": mask_api_key(decrypted),
+                    "is_connected": True,
+                    "status": k_row["status"]
+                }
         except Exception as e:
             logger.warning(f"Could not load saved user workspace data: {e}")
         finally:
@@ -470,7 +488,8 @@ async def google_auth_endpoint(payload: GoogleLoginRequest, response: Response, 
         "auth_provider": "GOOGLE",
         "is_verified": True,
         "saved_scenarios": saved_scenarios,
-        "saved_documents": saved_documents
+        "saved_documents": saved_documents,
+        "api_key_status": api_key_status
     }
 
     return {
@@ -513,7 +532,7 @@ async def get_current_user_profile(
         # Hydrate user's saved scenarios strictly isolated by user_id
         execute_query(
             cursor,
-            "SELECT id, name, description, created_date, status, agent_count, overall_risk_score FROM scenarios WHERE user_id = ? ORDER BY created_date DESC",
+            "SELECT id, name, description, created_date, status, agent_count, overall_risk_score, document_id FROM scenarios WHERE user_id = ? ORDER BY created_date DESC",
             (user_id,)
         )
         scen_rows = cursor.fetchall() or []
@@ -527,6 +546,24 @@ async def get_current_user_profile(
         )
         doc_rows = cursor.fetchall() or []
         saved_documents = [dict(d) for d in doc_rows]
+
+        execute_query(
+            cursor,
+            "SELECT provider, api_key, status FROM api_keys WHERE user_id = ? ORDER BY is_primary DESC, created_at DESC LIMIT 1",
+            (user_id,)
+        )
+        k_row = cursor.fetchone()
+        api_key_status = None
+        if k_row:
+            from app.core.security import decrypt_api_key
+            from app.api.keys import mask_api_key
+            decrypted = decrypt_api_key(k_row["api_key"])
+            api_key_status = {
+                "provider": k_row["provider"],
+                "masked_key": mask_api_key(decrypted),
+                "is_connected": True,
+                "status": k_row["status"]
+            }
     finally:
         conn.close()
 
@@ -548,5 +585,6 @@ async def get_current_user_profile(
         "created_at": current_user.get("created_at"),
         "last_login_at": current_user.get("last_login_at"),
         "saved_scenarios": saved_scenarios,
-        "saved_documents": saved_documents
+        "saved_documents": saved_documents,
+        "api_key_status": api_key_status
     }

@@ -16,7 +16,6 @@ import {
   RotateCcw,
   Volume2,
   VolumeX,
-  FileSpreadsheet,
   Layers,
   ChevronLeft,
   ChevronRight,
@@ -56,7 +55,6 @@ function SimulationWorkspaceContent({
   
   // Post-Simulation Report Data
   const [riskMonitor, setRiskMonitor] = useState<any>(null);
-  const [raciMatrix, setRaciMatrix] = useState<any>(null);
   const [slideDeck, setSlideDeck] = useState<any[]>([]);
   const [activeSlide, setActiveSlide] = useState(0);
   const [audioBriefing, setAudioBriefing] = useState<any>(null);
@@ -83,7 +81,6 @@ function SimulationWorkspaceContent({
           setGoalPrompt("");
           setPhase("A_INGESTION");
           setRiskMonitor(null);
-          setRaciMatrix(null);
           setSlideDeck([]);
           setAudioBriefing(null);
         }, 0);
@@ -117,12 +114,10 @@ function SimulationWorkspaceContent({
           setScrubRound((prev) => (prev !== 5 ? 5 : prev));
           Promise.all([
             reportApi.getRiskThresholdMonitor(activeId, riskThreshold),
-            reportApi.getRaciMatrix(activeId),
             reportApi.getSlideDeck(activeId),
             reportApi.getAudioBriefing(activeId),
-          ]).then(([monitorData, raciData, slidesData, audioData]) => {
+          ]).then(([monitorData, slidesData, audioData]) => {
             if (monitorData) setRiskMonitor(monitorData);
-            if (raciData) setRaciMatrix(raciData);
             if (slidesData) setSlideDeck(slidesData);
             if (audioData) setAudioBriefing(audioData);
           }).catch(() => {});
@@ -246,12 +241,10 @@ function SimulationWorkspaceContent({
       setScrubRound(5);
       Promise.all([
         reportApi.getRiskThresholdMonitor(activeId, riskThreshold),
-        reportApi.getRaciMatrix(activeId),
         reportApi.getSlideDeck(activeId),
         reportApi.getAudioBriefing(activeId),
-      ]).then(([monitorData, raciData, slidesData, audioData]) => {
+      ]).then(([monitorData, slidesData, audioData]) => {
         if (monitorData) setRiskMonitor(monitorData);
-        if (raciData) setRaciMatrix(raciData);
         if (slidesData) setSlideDeck(slidesData);
         if (audioData) setAudioBriefing(audioData);
         setPhase("COMPLETED");
@@ -519,49 +512,7 @@ function SimulationWorkspaceContent({
                         </div>
                       )}
 
-                      {/* FEATURE 2: AUTOMATED RACI MATRIX TABLE */}
-                      <div className="rounded-3xl border border-line bg-surface p-6 space-y-4 shadow-sm">
-                        <div className="flex items-center justify-between border-b border-line pb-3">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-xl bg-accent/15 text-accent flex items-center justify-center">
-                              <FileSpreadsheet className="h-5 w-5" />
-                            </div>
-                            <div>
-                              <h3 className="font-display text-base font-bold text-ink">Automated RACI Matrix</h3>
-                              <p className="text-xs text-muted font-mono">Mapped 8 OASIS sub-cluster factions into RACI governance tiers</p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left text-xs font-mono border-collapse">
-                            <thead>
-                              <tr className="border-b border-line text-muted">
-                                <th className="p-3">RACI TIER</th>
-                                <th className="p-3">ROLE DEFINITION</th>
-                                <th className="p-3">MAPPED OASIS FACTIONS</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {raciMatrix?.matrix?.map((item: any, idx: number) => (
-                                <tr key={item.category ? `raci-${item.category}-${idx}` : `raci-row-${idx}`} className="border-b border-line/50 hover:bg-base/40">
-                                  <td className="p-3 font-bold text-accent">{item.category}</td>
-                                  <td className="p-3 text-muted">{item.role_definition}</td>
-                                  <td className="p-3 space-y-1">
-                                    {item.factions.map((f: any, fIdx: number) => (
-                                      <div key={f.name ? `faction-${f.name}-${fIdx}` : `faction-idx-${fIdx}`} className="text-ink font-semibold">
-                                        • {f.name}
-                                      </div>
-                                    ))}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-
-                      {/* FEATURE 3: MULTIMODAL SYNTHESIS (SLIDE DECK & AUDIO BRIEFING) */}
+                      {/* FEATURE 2: MULTIMODAL SYNTHESIS (SLIDE DECK & AUDIO BRIEFING) */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* 5-Slide Carousel Preview */}
                         <div className="rounded-3xl border border-line bg-surface p-6 space-y-4 flex flex-col justify-between shadow-sm">

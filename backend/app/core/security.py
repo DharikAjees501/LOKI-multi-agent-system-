@@ -1,8 +1,11 @@
 import os
+import base64
+import hashlib
 import datetime
 from typing import Optional, Dict, Any, List
 from fastapi import Request, HTTPException, Depends
 import jwt
+from cryptography.fernet import Fernet, InvalidToken
 
 from app.core.config import settings
 from app.storage.database import get_db_connection, execute_query
@@ -17,6 +20,37 @@ def get_jwt_secret() -> str:
         logger.warning("JWT_SECRET_KEY not set in environment. Generating dynamic runtime secret.")
         secret = os.environ.setdefault("JWT_SECRET_KEY", os.urandom(32).hex())
     return secret
+
+def get_fernet_cipher() -> Fernet:
+    secret = get_jwt_secret().encode("utf-8")
+    derived_key = base64.urlsafe_b64encode(hashlib.sha256(secret).digest())
+    return Fernet(derived_key)
+
+def encrypt_api_key(raw_key: str) -> str:
+    """
+    Encrypts a user's BYOK API key at rest using Fernet derived from JWT_SECRET_KEY.
+    """
+    if not raw_key or not raw_key.strip():
+        return ""
+    cipher = get_fernet_cipher()
+    return cipher.encrypt(raw_key.strip().encode("utf-8")).decode("utf-8")
+
+def decrypt_api_key(stored_key: str) -> str:
+    """
+    Decrypts a stored API key in memory strictly when required by backend LLM calls.
+    Returns plain text if already plain (legacy fallback).
+    """
+    if not stored_key or not stored_key.strip():
+        return ""
+    cleaned = stored_key.strip()
+    if cleaned.startswith("AIzaSy") or cleaned.startswith("gsk_") or cleaned.startswith("sk-") or cleaned.startswith("AQ."):
+        return cleaned
+    cipher = get_fernet_cipher()
+    try:
+        return cipher.decrypt(cleaned.encode("utf-8")).decode("utf-8")
+    except (InvalidToken, Exception) as err:
+        logger.warning(f"[Security Vault] Decryption notice: {err}")
+        return cleaned
 
 def create_session_token(user_id: str, email: str) -> str:
     secret = get_jwt_secret()

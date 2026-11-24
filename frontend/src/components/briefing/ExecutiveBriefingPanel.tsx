@@ -683,7 +683,7 @@ export const ExecutiveBriefingPanel: React.FC<ExecutiveBriefingPanelProps> = ({
             </div>
 
             <div className="p-3.5 rounded-2xl bg-base/60 border border-line/60 text-xs font-body text-ink/90 leading-relaxed">
-              Implementing RACI mitigation steps stabilizes top-line ARR within 60 days of launch.
+              Implementing strategic mitigation steps stabilizes top-line ARR within 60 days of launch.
             </div>
           </div>
         )}

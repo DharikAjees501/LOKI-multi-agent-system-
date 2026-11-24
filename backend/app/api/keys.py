@@ -1,11 +1,12 @@
 import datetime
 import uuid
-from typing import Optional, List
-from fastapi import APIRouter, HTTPException
+from typing import Optional, List, Dict, Any
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 import httpx
 from app.storage.database import get_db_transaction, get_db_connection, execute_query, log_audit_event
 from app.core.logging import logger, audit_logger
+from app.core.security import get_optional_current_user, encrypt_api_key, decrypt_api_key
 
 router = APIRouter(tags=["keys"])
 
@@ -39,6 +40,8 @@ class KeyModel(BaseModel):
     is_primary: bool
     created_at: str
     updated_at: str
+    masked_key: Optional[str] = None
+    is_connected: Optional[bool] = True
 
 def mask_api_key(key: str) -> str:
     if not key:
@@ -480,25 +483,37 @@ async def verify_api_key(payload: VerifyKeyRequest):
 # Database CRUD Endpoints for Secure API Key Storage
 
 @router.get("/keys", response_model=List[KeyModel])
-async def list_stored_keys():
-    """Returns stored API keys securely from PostgreSQL/SQLite database."""
+async def list_stored_keys(
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
+    """Returns stored API keys securely from PostgreSQL/SQLite database with masked keys."""
+    user_id = current_user.get("id") if current_user else None
+
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM api_keys ORDER BY is_primary DESC, created_at DESC")
-        rows = cursor.fetchall()
+        if user_id:
+            execute_query(cursor, "SELECT * FROM api_keys WHERE user_id = ? ORDER BY is_primary DESC, created_at DESC", (user_id,))
+        else:
+            execute_query(cursor, "SELECT * FROM api_keys WHERE user_id IS NULL ORDER BY is_primary DESC, created_at DESC")
+        rows = cursor.fetchall() or []
     finally:
         conn.close()
 
     result = []
     for r in rows:
         d = dict(r)
+        # Decrypt strictly in memory only to compute masked display string
+        raw_or_dec = decrypt_api_key(d.get("api_key") or "")
+        masked = mask_api_key(raw_or_dec)
         result.append(KeyModel(
             id=d["id"],
             key_name=d["key_name"],
             provider=d["provider"],
-            api_key=mask_api_key(d["api_key"]),
-            status=d.get("status", "UNVERIFIED"),
+            api_key=masked,
+            masked_key=masked,
+            is_connected=True,
+            status=d.get("status", "VERIFIED"),
             is_primary=bool(d.get("is_primary", 0)),
             created_at=d["created_at"],
             updated_at=d["updated_at"]
@@ -506,13 +521,17 @@ async def list_stored_keys():
     return result
 
 @router.post("/keys", response_model=KeyModel)
-async def store_key_in_db(payload: StoreKeyRequest):
-    """Securely stores an API key in the PostgreSQL/SQLite database."""
+async def store_key_in_db(
+    payload: StoreKeyRequest,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
+    """Securely stores an API key in the PostgreSQL database, encrypted at rest via Fernet."""
     key_secret = payload.api_key.strip()
     provider = payload.provider.lower()
     key_id = f"key-{uuid.uuid4().hex[:10]}"
     now = datetime.datetime.now().isoformat()
     name = payload.key_name or f"{provider.upper()} Key"
+    user_id = current_user.get("id") if current_user else None
 
     # Verify key status with official provider
     verification = await verify_api_key(VerifyKeyRequest(api_key=key_secret, provider=provider))
@@ -522,35 +541,32 @@ async def store_key_in_db(payload: StoreKeyRequest):
             detail=verification.message or f"Verification failed with official {provider.capitalize()} provider. Key was not saved."
         )
 
-    # Check existing keys to determine primary status
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) as count FROM api_keys")
-        row = cursor.fetchone()
-    finally:
-        conn.close()
-
-    is_primary = 1 if (row and dict(row)["count"] == 0) else 0
+    # Encrypt key at rest using Fernet derived from JWT_SECRET_KEY
+    encrypted_secret = encrypt_api_key(key_secret)
 
     with get_db_transaction() as conn:
         cursor = conn.cursor()
+        if user_id:
+            execute_query(cursor, "UPDATE api_keys SET is_primary = 0 WHERE user_id = ?", (user_id,))
         execute_query(
             cursor,
-            """INSERT INTO api_keys (id, key_name, provider, api_key, status, is_primary, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (key_id, name, provider, key_secret, verification.status, is_primary, now, now)
+            """INSERT INTO api_keys (id, key_name, provider, api_key, status, is_primary, user_id, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)""",
+            (key_id, name, provider, encrypted_secret, verification.status, user_id, now, now)
         )
 
-    log_audit_event("STORE_API_KEY", "USER", f"Stored API key for provider {provider} securely in database.")
+    log_audit_event("STORE_API_KEY", user_id or "USER", f"Stored encrypted API key for provider {provider} in user vault.")
 
+    masked = mask_api_key(key_secret)
     return KeyModel(
         id=key_id,
         key_name=name,
         provider=provider,
-        api_key=mask_api_key(key_secret),
+        api_key=masked,
+        masked_key=masked,
+        is_connected=True,
         status=verification.status,
-        is_primary=bool(is_primary),
+        is_primary=True,
         created_at=now,
         updated_at=now
     )
@@ -560,24 +576,39 @@ class DeleteKeyRequest(BaseModel):
 
 @router.delete("/keys/clear")
 @router.delete("/keys/all")
-async def clear_all_keys_from_db():
-    """Deletes all API keys from database."""
+async def clear_all_keys_from_db(
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
+    """Deletes all API keys for the current user from database."""
+    user_id = current_user.get("id") if current_user else None
     with get_db_transaction() as conn:
         cursor = conn.cursor()
-        execute_query(cursor, "DELETE FROM api_keys")
-    log_audit_event("CLEAR_API_KEYS", "USER", "Cleared all API keys from database.")
+        if user_id:
+            execute_query(cursor, "DELETE FROM api_keys WHERE user_id = ?", (user_id,))
+        else:
+            execute_query(cursor, "DELETE FROM api_keys WHERE user_id IS NULL")
+    log_audit_event("CLEAR_API_KEYS", user_id or "USER", "Cleared API keys from database.")
     return {"success": True, "message": "All API keys deleted from database."}
 
 @router.delete("/keys/{key_id}")
-async def delete_key_from_db(key_id: str, payload: Optional[DeleteKeyRequest] = None):
+async def delete_key_from_db(
+    key_id: str,
+    payload: Optional[DeleteKeyRequest] = None,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
     """Deletes an API key securely from the database."""
+    user_id = current_user.get("id") if current_user else None
     with get_db_transaction() as conn:
         cursor = conn.cursor()
         if key_id in ["clear", "all"]:
-            execute_query(cursor, "DELETE FROM api_keys")
+            if user_id:
+                execute_query(cursor, "DELETE FROM api_keys WHERE user_id = ?", (user_id,))
+            else:
+                execute_query(cursor, "DELETE FROM api_keys WHERE user_id IS NULL")
         else:
-            execute_query(cursor, "DELETE FROM api_keys WHERE id = ?", (key_id,))
-            if payload and payload.api_key and payload.api_key.strip():
-                execute_query(cursor, "DELETE FROM api_keys WHERE api_key = ?", (payload.api_key.strip(),))
-    log_audit_event("DELETE_API_KEY", "USER", f"Deleted API key {key_id} from database.")
+            if user_id:
+                execute_query(cursor, "DELETE FROM api_keys WHERE id = ? AND user_id = ?", (key_id, user_id))
+            else:
+                execute_query(cursor, "DELETE FROM api_keys WHERE id = ?", (key_id,))
+    log_audit_event("DELETE_API_KEY", user_id or "USER", f"Deleted API key {key_id} from database.")
     return {"success": True, "message": "API key deleted from database."}
