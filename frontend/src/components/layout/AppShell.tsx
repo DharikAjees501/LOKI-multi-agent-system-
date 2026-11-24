@@ -152,10 +152,24 @@ export const AppShell: React.FC<AppShellProps> = ({ title, subtitle, children })
       const syncWithBackend = async () => {
         try {
           const currentId = getActiveScenarioId();
-          if (!currentId) return;
+          if (!currentId) {
+            setSimulationStatus("IDLE");
+            if (typeof window !== "undefined") {
+              localStorage.setItem("SWARMLENS_SIM_STATUS", "IDLE");
+              localStorage.setItem("LOKI_SIM_STATUS", "IDLE");
+            }
+            return;
+          }
           const scens = await scenarioApi.getScenarios();
           const currentScen = scens.find((s: any) => s.id === currentId);
-          if (!currentScen) return;
+          if (!currentScen) {
+            setSimulationStatus("IDLE");
+            if (typeof window !== "undefined") {
+              localStorage.setItem("SWARMLENS_SIM_STATUS", "IDLE");
+              localStorage.setItem("LOKI_SIM_STATUS", "IDLE");
+            }
+            return;
+          }
 
           const st = currentScen.status || "";
           if (st.includes("ROUND_")) {

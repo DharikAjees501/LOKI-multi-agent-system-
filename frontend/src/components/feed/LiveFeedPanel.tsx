@@ -46,23 +46,33 @@ export const LiveFeedPanel: React.FC<LiveFeedPanelProps> = ({
     }
   };
 
+  const [isSimRunning, setIsSimRunning] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return (
+      localStorage.getItem("SWARMLENS_SIM_STATUS") === "RUNNING" ||
+      localStorage.getItem("LOKI_SIM_STATUS") === "RUNNING"
+    );
+  });
+
   useEffect(() => {
     loadFeedEvents();
 
-    const handleScenarioEvent = () => loadFeedEvents();
+    const handleScenarioEvent = () => {
+      loadFeedEvents();
+      const running =
+        typeof window !== "undefined" &&
+        (localStorage.getItem("SWARMLENS_SIM_STATUS") === "RUNNING" ||
+          localStorage.getItem("LOKI_SIM_STATUS") === "RUNNING");
+      setIsSimRunning(running);
+    };
+
     if (typeof window !== "undefined") {
       window.addEventListener("scenario_changed", handleScenarioEvent);
       window.addEventListener("simulation_completed", handleScenarioEvent);
       window.addEventListener("swarmlens_start_simulation", handleScenarioEvent);
     }
 
-    // Set up 2.5s polling for real live feed
-    const interval = setInterval(() => {
-      loadFeedEvents();
-    }, 2500);
-
     return () => {
-      clearInterval(interval);
       if (typeof window !== "undefined") {
         window.removeEventListener("scenario_changed", handleScenarioEvent);
         window.removeEventListener("simulation_completed", handleScenarioEvent);
@@ -70,6 +80,19 @@ export const LiveFeedPanel: React.FC<LiveFeedPanelProps> = ({
       }
     };
   }, []);
+
+  // Poll only while a simulation is actively running
+  useEffect(() => {
+    if (!isSimRunning) return;
+
+    const interval = setInterval(() => {
+      loadFeedEvents();
+    }, 2500);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [isSimRunning]);
 
   const channels: { id: ChannelId; name: string; badge: string }[] = [
     { id: "BOARDROOM", name: "Executive Boardroom", badge: "Tier 1" },

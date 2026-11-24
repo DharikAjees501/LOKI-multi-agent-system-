@@ -37,6 +37,8 @@ export function ScenarioStatusBanner({ onScenarioCompleted }: ScenarioStatusBann
         if (isRunningPrev && isDoneNew && onScenarioCompleted) {
           onScenarioCompleted();
         }
+      } else {
+        setStatus("READY");
       }
     } catch (err) {
       console.warn("[ScenarioStatusBanner] Failed to check status:", err);
