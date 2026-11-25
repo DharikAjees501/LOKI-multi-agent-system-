@@ -7,6 +7,14 @@ import httpx
 from app.storage.database import get_db_transaction, get_db_connection, execute_query, log_audit_event
 from app.core.logging import logger, audit_logger
 from app.core.security import get_optional_current_user, encrypt_api_key, decrypt_api_key
+from constants.error import NO_KEYS_PROVIDED
+from constants.success import (
+    ALL_KEYS_DELETED,
+    API_KEY_DELETED,
+    STATUS_SUCCESS,
+    STATUS_ACTIVE,
+    STATUS_REJECTED,
+)
 
 router = APIRouter(tags=["keys"])
 
@@ -200,7 +208,7 @@ async def verify_keys_config_route(payload: ConfigVerifyRequest):
         keys_to_verify.append(payload.api_key.strip())
 
     if not keys_to_verify:
-        raise HTTPException(status_code=400, detail="No API keys provided in verification payload.")
+        raise HTTPException(status_code=400, detail=NO_KEYS_PROVIDED)
 
     verified_results = []
     failed_errors = []
@@ -213,7 +221,7 @@ async def verify_keys_config_route(payload: ConfigVerifyRequest):
             "index": idx,
             "provider": prov_name,
             "hint": hint,
-            "status": "active" if is_valid else "rejected",
+            "status": STATUS_ACTIVE if is_valid else STATUS_REJECTED,
             "reason": reason
         })
 
@@ -221,7 +229,7 @@ async def verify_keys_config_route(payload: ConfigVerifyRequest):
             verified_results.append({
                 "index": idx,
                 "hint": hint,
-                "status": "active",
+                "status": STATUS_ACTIVE,
                 "provider": prov_name
             })
         else:
@@ -231,7 +239,7 @@ async def verify_keys_config_route(payload: ConfigVerifyRequest):
         raise HTTPException(status_code=400, detail="; ".join(failed_errors))
 
     return {
-        "status": "success",
+        "status": STATUS_SUCCESS,
         "verified_keys": verified_results,
         "failed_count": len(failed_errors)
     }
@@ -588,7 +596,7 @@ async def clear_all_keys_from_db(
         else:
             execute_query(cursor, "DELETE FROM api_keys WHERE user_id IS NULL")
     log_audit_event("CLEAR_API_KEYS", user_id or "USER", "Cleared API keys from database.")
-    return {"success": True, "message": "All API keys deleted from database."}
+    return {"success": True, "message": ALL_KEYS_DELETED}
 
 @router.delete("/keys/{key_id}")
 async def delete_key_from_db(
@@ -611,4 +619,4 @@ async def delete_key_from_db(
             else:
                 execute_query(cursor, "DELETE FROM api_keys WHERE id = ?", (key_id,))
     log_audit_event("DELETE_API_KEY", user_id or "USER", f"Deleted API key {key_id} from database.")
-    return {"success": True, "message": "API key deleted from database."}
+    return {"success": True, "message": API_KEY_DELETED}

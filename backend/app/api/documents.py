@@ -8,6 +8,22 @@ from app.models.document import DocumentUploadResponse
 from app.core.logging import logger
 from app.storage.database import get_db_connection, log_audit_event
 from app.core.security import get_optional_current_user, get_current_user, verify_document_access
+from constants.error import (
+    FILENAME_EMPTY,
+    FILE_CONTENT_EMPTY,
+    unsupported_file_format,
+    file_size_exceeded,
+)
+from constants.success import (
+    STATUS_DELETED,
+)
+from constants.message import (
+    log_document_upload_processing,
+    log_document_upload_success,
+    log_document_fetching,
+    log_document_delete,
+    log_document_delete_failed,
+)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -19,7 +35,7 @@ async def upload_document(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     if not file.filename:
-        raise HTTPException(status_code=400, detail="Filename cannot be empty")
+        raise HTTPException(status_code=400, detail=FILENAME_EMPTY)
 
     user_id = current_user["id"]
 
@@ -29,21 +45,21 @@ async def upload_document(
     if ext not in settings.ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported file format '{ext}'. Allowed formats: {', '.join(settings.ALLOWED_EXTENSIONS)}"
+            detail=unsupported_file_format(ext, settings.ALLOWED_EXTENSIONS)
         )
     content = await file.read()
     if len(content) == 0:
-        raise HTTPException(status_code=400, detail="File content is empty")
+        raise HTTPException(status_code=400, detail=FILE_CONTENT_EMPTY)
     if len(content) > settings.MAX_UPLOAD_SIZE_BYTES:
         raise HTTPException(
             status_code=413,
-            detail=f"File size ({len(content)} bytes) exceeds maximum limit of {settings.MAX_UPLOAD_SIZE_BYTES} bytes (15 MB)."
+            detail=file_size_exceeded(len(content), settings.MAX_UPLOAD_SIZE_BYTES)
         )
-    logger.info(f"[Documents API] Processing upload request for file: {safe_filename} (Size: {len(content)} bytes, User: {user_id})")
+    logger.info(log_document_upload_processing(safe_filename, len(content), user_id))
     response = document_service.process_and_store_document(content, safe_filename, user_id=user_id)
 
     log_audit_event("DOCUMENT_UPLOAD", "USER", f"Uploaded file {safe_filename} (Doc ID: {response.document_id}).")
-    logger.info(f"[Documents API] Document upload completed successfully for {safe_filename} (Doc ID: {response.document_id})")
+    logger.info(log_document_upload_success(safe_filename, response.document_id))
     return response
 
 @router.get("/{document_id}")
@@ -51,7 +67,7 @@ async def get_document(
     document_id: str,
     current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
 ):
-    logger.info(f"[Documents API] Fetching document metadata & chunks for ID: {document_id}")
+    logger.info(log_document_fetching(document_id))
     user_id = current_user.get("id") if current_user else None
     doc = verify_document_access(document_id, user_id)
 
@@ -78,7 +94,7 @@ async def delete_document(
     document_id: str,
     current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
 ):
-    logger.info(f"[Documents API] Deleting document and cascading scenarios: {document_id}")
+    logger.info(log_document_delete(document_id))
     user_id = current_user.get("id") if current_user else None
     verify_document_access(document_id, user_id)
 
@@ -125,8 +141,8 @@ async def delete_document(
                             logger.warning(f"Could not remove disk file {cand_path}: {fe}")
     except Exception as err:
         conn.rollback()
-        logger.error(f"[Documents API] Failed to delete document {document_id}: {err}")
+        logger.error(log_document_delete_failed(document_id, err))
         raise HTTPException(status_code=500, detail=str(err))
     finally:
         conn.close()
-    return {"status": "deleted", "document_id": document_id, "success": True}
+    return {"status": STATUS_DELETED, "document_id": document_id, "success": True}

@@ -9,6 +9,8 @@ try:
 except ImportError:
     from backend.app.core.config import settings
     from backend.app.core.logging import logger
+from constants.error import RATE_LIMIT_EXCEEDED
+from constants.message import log_rate_limit_exceeded
 
 class SlidingWindowRateLimiter:
     def __init__(self, requests_per_minute: int = settings.RATE_LIMIT_PER_MINUTE):
@@ -52,9 +54,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         allowed, remaining = rate_limiter.is_allowed(client_ip, limit_override=limit)
 
         if not allowed:
-            logger.warning(f"Rate limit exceeded for IP {client_ip} on path {path}")
+            logger.warning(log_rate_limit_exceeded(client_ip, path))
+            import json
             return Response(
-                content='{"error": true, "detail": "Rate limit exceeded. Too many requests. Please wait before retrying."}',
+                content=json.dumps({"error": True, "detail": RATE_LIMIT_EXCEEDED}),
                 status_code=429,
                 media_type="application/json",
                 headers={

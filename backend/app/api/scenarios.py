@@ -16,6 +16,21 @@ from app.storage.database import get_db_connection, execute_query
 from app.core.config import settings
 from app.core.logging import logger
 from app.core.security import get_optional_current_user, get_current_user, verify_scenario_access
+from constants.error import cascade_delete_failed
+from constants.success import (
+    STATUS_READY,
+    STATUS_GENERATING_GRAPH,
+    STATUS_FAILED,
+    STATUS_DELETED,
+    scenario_pipeline_dispatched,
+)
+from constants.message import (
+    log_scenario_creating,
+    log_scenario_creating_and_running,
+    log_isolated_step,
+    log_isolated_completed,
+    log_isolated_error,
+)
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
 
@@ -24,7 +39,7 @@ async def create_scenario(
     payload: ScenarioCreate,
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
-    logger.info(f"[Scenarios API] Creating new scenario: '{payload.name}'")
+    logger.info(log_scenario_creating(payload.name))
     scen_id = f"scen-{uuid.uuid4().hex[:6]}"
     created_date = datetime.datetime.now().strftime("%Y-%m-%d")
 
@@ -36,7 +51,7 @@ async def create_scenario(
         cursor.execute(
             """INSERT INTO scenarios (id, name, description, document_id, created_date, last_simulation, status, agent_count, overall_risk_score, user_id)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (scen_id, payload.name, payload.description, payload.document_id or "", created_date, "Never", "READY", 50, 50, user_id)
+            (scen_id, payload.name, payload.description, payload.document_id or "", created_date, "Never", STATUS_READY, 50, 50, user_id)
         )
         conn.commit()
     finally:
@@ -49,7 +64,7 @@ async def create_scenario(
         documentName=payload.document_id or "No document loaded",
         createdDate=created_date,
         lastSimulation="Never",
-        status="READY",
+        status=STATUS_READY,
         agentCount=50,
         overallRiskScore=50,
         user_id=user_id
@@ -66,7 +81,7 @@ async def create_and_run_scenario(
     payload: CreateAndRunScenarioRequest,
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
-    logger.info(f"[Scenarios API] Creating and running isolated scenario: '{payload.name}'")
+    logger.info(log_scenario_creating_and_running(payload.name))
     scen_id = f"scen-{uuid.uuid4().hex[:6]}"
     created_date = datetime.datetime.now().strftime("%Y-%m-%d")
     title = payload.name.strip() or "Strategic Scenario"
@@ -80,7 +95,7 @@ async def create_and_run_scenario(
         cursor.execute(
             """INSERT INTO scenarios (id, name, description, document_id, created_date, last_simulation, status, agent_count, overall_risk_score, user_id)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (scen_id, title, desc, doc_id, created_date, "Never", "GENERATING_GRAPH", 200, 50, user_id)
+            (scen_id, title, desc, doc_id, created_date, "Never", STATUS_GENERATING_GRAPH, 200, 50, user_id)
         )
         conn.commit()
     finally:
@@ -88,16 +103,16 @@ async def create_and_run_scenario(
 
     async def execute_isolated_pipeline():
         try:
-            logger.info(f"[Isolated Pipeline] Step 1: Running GraphRAG extraction for {scen_id}")
+            logger.info(log_isolated_step(1, "Running GraphRAG extraction", scen_id))
             await orchestrator.run_scenario_pipeline(
                 scenario_id=scen_id,
                 document_id=doc_id,
                 scenario_title=title,
                 description=desc
             )
-            logger.info(f"[Isolated Pipeline] Step 2: Spawning 200 personas for {scen_id}")
+            logger.info(log_isolated_step(2, "Spawning 200 personas", scen_id))
             agents = persona_service.generate_personas_for_scenario(scen_id, total_agents=200)
-            logger.info(f"[Isolated Pipeline] Step 3: Launching 5-round OASIS deliberation for {scen_id}")
+            logger.info(log_isolated_step(3, "Launching 5-round OASIS deliberation", scen_id))
             await oasis_engine.run_full_simulation(
                 scenario_id=scen_id,
                 agents=agents,
@@ -106,14 +121,14 @@ async def create_and_run_scenario(
                 risk_threshold=35.0,
                 is_what_if=payload.is_what_if or False
             )
-            logger.info(f"[Isolated Pipeline] Step 4: Full simulation successfully concluded for {scen_id}.")
+            logger.info(log_isolated_completed(scen_id))
         except Exception as err:
-            logger.error(f"[Isolated Pipeline Error for {scen_id}]: {err}", exc_info=True)
+            logger.error(log_isolated_error(scen_id, err), exc_info=True)
             try:
                 conn_err = get_db_connection()
                 try:
                     cur_err = conn_err.cursor()
-                    execute_query(cur_err, "UPDATE scenarios SET status = 'FAILED' WHERE id = ?", (scen_id,))
+                    execute_query(cur_err, f"UPDATE scenarios SET status = '{STATUS_FAILED}' WHERE id = ?", (scen_id,))
                     conn_err.commit()
                 finally:
                     conn_err.close()
@@ -129,10 +144,10 @@ async def create_and_run_scenario(
         "description": desc,
         "documentName": doc_id,
         "createdDate": created_date,
-        "status": "GENERATING_GRAPH",
+        "status": STATUS_GENERATING_GRAPH,
         "agentCount": 200,
         "overallRiskScore": 50,
-        "message": f"Scenario {scen_id} created and isolated pipeline task dispatched."
+        "message": scenario_pipeline_dispatched(scen_id)
     }
 
 @router.get("", response_model=List[ScenarioModel])
@@ -443,8 +458,8 @@ async def delete_scenario(
     except Exception as err:
         conn.rollback()
         logger.error(f"[Scenarios API] Error during scenario deletion: {err}")
-        raise HTTPException(status_code=500, detail=f"Database cascade delete failed: {err}")
+        raise HTTPException(status_code=500, detail=cascade_delete_failed(err))
     finally:
         conn.close()
 
-    return {"status": "deleted", "scenario_id": id, "success": True}
+    return {"status": STATUS_DELETED, "scenario_id": id, "success": True}

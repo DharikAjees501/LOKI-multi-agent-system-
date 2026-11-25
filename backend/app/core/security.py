@@ -10,6 +10,18 @@ from cryptography.fernet import Fernet, InvalidToken
 from app.core.config import settings
 from app.storage.database import get_db_connection, execute_query
 from app.core.logging import logger
+from constants.error import (
+    AUTH_REQUIRED,
+    SESSION_EXPIRED,
+    USER_ACCOUNT_NOT_FOUND,
+    CSRF_VERIFICATION_FAILED,
+    DOCUMENT_NOT_FOUND,
+    SCENARIO_NOT_FOUND,
+)
+from constants.message import (
+    log_csrf_blocked,
+    log_ownership_blocked,
+)
 
 SESSION_COOKIE_NAME = "swarmlens_session"
 SESSION_MAX_AGE = 86400  # 24 hours
@@ -91,11 +103,11 @@ def extract_token_from_request(request: Request) -> Optional[str]:
 async def get_current_user(request: Request) -> Dict[str, Any]:
     token = extract_token_from_request(request)
     if not token:
-        raise HTTPException(status_code=401, detail="Authentication required")
+        raise HTTPException(status_code=401, detail=AUTH_REQUIRED)
 
     payload = decode_session_token(token)
     if not payload or not payload.get("sub"):
-        raise HTTPException(status_code=401, detail="Invalid or expired session. Please sign in again.")
+        raise HTTPException(status_code=401, detail=SESSION_EXPIRED)
 
     user_id = payload["sub"]
     conn = get_db_connection()
@@ -104,7 +116,7 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
         execute_query(cursor, "SELECT * FROM users WHERE id = ?", (user_id,))
         row = cursor.fetchone()
         if not row:
-            raise HTTPException(status_code=401, detail="User account not found")
+            raise HTTPException(status_code=401, detail=USER_ACCOUNT_NOT_FOUND)
         return dict(row)
     finally:
         conn.close()
@@ -145,8 +157,8 @@ def verify_csrf_origin(request: Request) -> None:
             # Normalize origin
             norm_origin = origin.rstrip("/")
             if norm_origin not in allowed_origins and not any(norm_origin.startswith(ao.rstrip("/")) for ao in allowed_origins):
-                logger.warning(f"[CSRF Guard] Untrusted origin blocked: {origin}")
-                raise HTTPException(status_code=403, detail="CSRF origin verification failed.")
+                logger.warning(log_csrf_blocked(origin))
+                raise HTTPException(status_code=403, detail=CSRF_VERIFICATION_FAILED)
 
 def verify_document_access(document_id: str, user_id: Optional[str]) -> Dict[str, Any]:
     conn = get_db_connection()
@@ -155,13 +167,13 @@ def verify_document_access(document_id: str, user_id: Optional[str]) -> Dict[str
         execute_query(cursor, "SELECT * FROM documents WHERE id = ?", (document_id,))
         row = cursor.fetchone()
         if not row:
-            raise HTTPException(status_code=404, detail="Document not found")
+            raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
         doc = dict(row)
         doc_user_id = doc.get("user_id")
         # If document has a user_id and does not match current user, 404 (prevent ID enumeration)
         if doc_user_id and user_id and doc_user_id != user_id:
-            logger.warning(f"[Ownership Guard] User {user_id} attempted access to document {document_id} owned by {doc_user_id}")
-            raise HTTPException(status_code=404, detail="Document not found")
+            logger.warning(log_ownership_blocked(user_id, "document", document_id, doc_user_id))
+            raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
         return doc
     finally:
         conn.close()
@@ -173,13 +185,13 @@ def verify_scenario_access(scenario_id: str, user_id: Optional[str]) -> Dict[str
         execute_query(cursor, "SELECT * FROM scenarios WHERE id = ?", (scenario_id,))
         row = cursor.fetchone()
         if not row:
-            raise HTTPException(status_code=404, detail="Scenario not found")
+            raise HTTPException(status_code=404, detail=SCENARIO_NOT_FOUND)
         scen = dict(row)
         scen_user_id = scen.get("user_id")
         # If scenario has a user_id and does not match current user, 404 (prevent ID enumeration)
         if scen_user_id and user_id and scen_user_id != user_id:
-            logger.warning(f"[Ownership Guard] User {user_id} attempted access to scenario {scenario_id} owned by {scen_user_id}")
-            raise HTTPException(status_code=404, detail="Scenario not found")
+            logger.warning(log_ownership_blocked(user_id, "scenario", scenario_id, scen_user_id))
+            raise HTTPException(status_code=404, detail=SCENARIO_NOT_FOUND)
         return scen
     finally:
         conn.close()

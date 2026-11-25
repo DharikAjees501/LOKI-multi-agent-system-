@@ -10,6 +10,14 @@ from app.storage.database import get_db_connection
 from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from constants.error import (
+    TEXT_CANNOT_BE_EMPTY,
+    MESSAGE_CANNOT_BE_EMPTY,
+    INVALID_SCENARIO_ID,
+    scenario_not_found,
+    tts_speech_error,
+    database_retrieval_failed,
+)
 
 router = APIRouter(tags=["reports"])
 
@@ -31,7 +39,7 @@ async def generate_edge_tts_audio(payload: TTSStreamRequest):
     """
     clean_text = (payload.text or "").strip()
     if not clean_text:
-        raise HTTPException(status_code=400, detail="Text cannot be empty.")
+        raise HTTPException(status_code=400, detail=TEXT_CANNOT_BE_EMPTY)
 
     voice = payload.voice or "en-US-ChristopherNeural"
     rate = payload.rate or "+5%"
@@ -57,7 +65,7 @@ async def generate_edge_tts_audio(payload: TTSStreamRequest):
         )
     except Exception as err:
         logger.error(f"[EdgeTTS] Error synthesizing speech: {err}")
-        raise HTTPException(status_code=500, detail=f"Edge TTS speech generation error: {err}")
+        raise HTTPException(status_code=500, detail=tts_speech_error(err))
 
 @router.get("/reports/tts/voices")
 @router.get("/api/reports/tts/voices")
@@ -82,7 +90,7 @@ async def get_edge_tts_voices():
 
 def validate_scenario_id(scenario_id: str) -> str:
     if not scenario_id or str(scenario_id).strip().lower() in ("none", "undefined", "null", "", "scen-01"):
-        raise HTTPException(status_code=404, detail="Invalid scenario ID.")
+        raise HTTPException(status_code=404, detail=INVALID_SCENARIO_ID)
     return scenario_id.strip()
 
 @router.get("/scenarios/{id}/report")
@@ -91,7 +99,7 @@ async def get_scenario_report(id: str, round: int | None = Query(None)):
     logger.info(f"[Reports API] Generating synthesis executive report for scenario: {clean_id} (Round: {round})")
     rep = report_service.get_report_for_scenario(clean_id, round_num=round)
     if not rep:
-        raise HTTPException(status_code=404, detail=f"Scenario '{clean_id}' not found.")
+        raise HTTPException(status_code=404, detail=scenario_not_found(clean_id))
     return rep
 
 @router.get("/scenarios/{id}/risks")
@@ -328,7 +336,7 @@ async def chat_with_report_agent(scenario_id: str, payload: ReportChatRequest):
     """
     user_query = payload.message.strip()
     if not user_query:
-        raise HTTPException(status_code=400, detail="Message cannot be empty.")
+        raise HTTPException(status_code=400, detail=MESSAGE_CANNOT_BE_EMPTY)
 
     valid_roles: list[str] = []
     citations: list[str] = []
@@ -429,7 +437,7 @@ async def chat_with_report_agent(scenario_id: str, payload: ReportChatRequest):
 
     except Exception as db_err:
         logger.error(f"[ReportAgentChat] DB retrieval error: {db_err}")
-        raise HTTPException(status_code=500, detail=f"Database retrieval failed: {db_err}")
+        raise HTTPException(status_code=500, detail=database_retrieval_failed(db_err))
     finally:
         # CRITICAL: Close DB connection BEFORE awaiting the LLM call to prevent pool exhaustion!
         conn.close()

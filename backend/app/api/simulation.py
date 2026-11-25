@@ -12,6 +12,19 @@ from app.engine.oasis_engine import oasis_engine
 from app.storage.database import get_db_connection, get_db_transaction, execute_query
 from app.core.logging import logger
 from app.core.security import get_optional_current_user, verify_scenario_access
+from constants.error import FREE_RUNS_EXHAUSTED
+from constants.success import (
+    BASELINE_SIMULATION_DISPATCHED,
+    WHAT_IF_SIMULATION_DISPATCHED,
+    STATUS_RUNNING_BASELINE,
+    STATUS_RUNNING_WHAT_IF,
+)
+from constants.message import (
+    LOG_QUOTA_VALID_BYOK,
+    LOG_QUOTA_ANONYMOUS_ATTEMPT,
+    log_quota_exhausted,
+    log_quota_deducted,
+)
 
 router = APIRouter(tags=["simulation"])
 
@@ -53,15 +66,15 @@ async def check_quota_and_guard_byok(request: Request):
             conn.close()
 
     if has_valid_byok:
-        logger.info("[Quota Guard] Valid BYOK key verified in memory/vault. Unlimited simulation permitted.")
+        logger.info(LOG_QUOTA_VALID_BYOK)
         return {"unlimited": True, "byok": True}
 
     # No BYOK key provided -> inspect session quota from HttpOnly cookie or bearer token
     if not user:
-        logger.warning("[Quota Guard] Anonymous simulation attempt without BYOK keys.")
+        logger.warning(LOG_QUOTA_ANONYMOUS_ATTEMPT)
         raise HTTPException(
             status_code=403,
-            detail="Free runs used. Add your free Gemini or Groq API key in the top bar for unlimited simulations."
+            detail=FREE_RUNS_EXHAUSTED
         )
 
     user_id = user["id"]
@@ -71,10 +84,10 @@ async def check_quota_and_guard_byok(request: Request):
     total_runs = user.get("total_sessions_run", 0) or 0
 
     if free_remaining <= 0:
-        logger.warning(f"[Quota Guard] User {user_id} has exhausted free courtesy runs.")
+        logger.warning(log_quota_exhausted(user_id))
         raise HTTPException(
             status_code=403,
-            detail="Free runs used. Add your free Gemini or Groq API key in the top bar for unlimited simulations."
+            detail=FREE_RUNS_EXHAUSTED
         )
 
     new_free = max(0, free_remaining - 1)
@@ -88,7 +101,7 @@ async def check_quota_and_guard_byok(request: Request):
             (new_free, new_total, user_id)
         )
 
-    logger.info(f"[Quota Guard] Deducted courtesy run for user {user_id}. Remaining: {new_free}")
+    logger.info(log_quota_deducted(user_id, new_free))
     return {"unlimited": False, "free_sessions_remaining": new_free}
 
 @router.get("/scenarios/{id}/simulation", response_model=SimulationStateModel)
@@ -235,10 +248,10 @@ async def run_live_simulation(id: str, payload: Optional[RunSimulationRequest] =
     )
     return {
         "scenario_id": id,
-        "status": "RUNNING_BASELINE" if not p.is_what_if else "RUNNING_WHAT_IF",
+        "status": STATUS_RUNNING_BASELINE if not p.is_what_if else STATUS_RUNNING_WHAT_IF,
         "total_rounds": 5,
         "agent_count": len(agents),
-        "message": "Baseline 5-round simulation task dispatched successfully."
+        "message": BASELINE_SIMULATION_DISPATCHED
     }
 
 class WhatIfSimulationRequest(BaseModel):
@@ -273,13 +286,13 @@ async def run_what_if_simulation(id: str, payload: WhatIfSimulationRequest):
 
     return {
         "scenario_id": id,
-        "status": "RUNNING_WHAT_IF",
+        "status": STATUS_RUNNING_WHAT_IF,
         "total_rounds": 5,
         "agent_count": len(agents),
         "goal_prompt": goal,
         "shock_event": shock,
         "risk_threshold": thresh,
-        "message": "Phase B What-If 5-round re-simulation dispatched successfully."
+        "message": WHAT_IF_SIMULATION_DISPATCHED
     }
 
 

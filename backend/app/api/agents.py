@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.core.guardrails import guardrail_manager
 from app.core.telemetry import telemetry
+from constants.error import API_KEY_REQUIRED_INTERROGATION
 import time
 
 router = APIRouter(tags=["agents"])
@@ -324,7 +325,7 @@ async def interrogate_agent(
 
     # If no API key is available anywhere, return 401 Unauthorized
     if not candidate_keys:
-        raise HTTPException(status_code=401, detail="API key required for live interrogation.")
+        raise HTTPException(status_code=401, detail=API_KEY_REQUIRED_INTERROGATION)
 
     # --- STEP 2: SYSTEM INSTRUCTION ASSEMBLY ---
     # Determine Emotional & Practical Posture based on Stance

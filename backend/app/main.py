@@ -11,6 +11,9 @@ from app.core.rate_limiter import RateLimitMiddleware
 from app.core.telemetry import telemetry
 from app.engine.swarm_orchestrator import orchestrator_engine
 from app.storage.database import ensure_db_initialized
+from constants.error import CSRF_VERIFICATION_FAILED, INTERNAL_SERVER_ERROR
+from constants.success import STATUS_OPERATIONAL, STATUS_HEALTHY, DB_CONNECTED
+from constants.message import log_csrf_blocked
 from fastapi import (
     FastAPI,
     HTTPException,
@@ -81,10 +84,10 @@ async def csrf_origin_middleware(request: Request, call_next):
             ])
             norm = origin.rstrip("/")
             if norm not in allowed and not any(norm.startswith(a.rstrip("/")) for a in allowed):
-                logger.warning(f"[CSRF Protection] Untrusted origin blocked: {origin} on {request.url.path}")
+                logger.warning(log_csrf_blocked(origin, request.url.path))
                 return JSONResponse(
                     status_code=403,
-                    content={"error": True, "detail": "CSRF origin verification failed."}
+                    content={"error": True, "detail": CSRF_VERIFICATION_FAILED}
                 )
     return await call_next(request)
 
@@ -103,7 +106,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     # Generic safe error message to prevent leaking tracebacks or env variables
     return JSONResponse(
         status_code=500,
-        content={"error": True, "detail": "Internal server error", "path": str(request.url.path)}
+        content={"error": True, "detail": INTERNAL_SERVER_ERROR, "path": str(request.url.path)}
     )
 
 # Include API Routers with prefix (/api)
@@ -138,7 +141,7 @@ async def root():
     return {
         "app": settings.PROJECT_NAME,
         "version": "5.0.0-production-hardened",
-        "status": "OPERATIONAL",
+        "status": STATUS_OPERATIONAL,
         "docs": f"{settings.API_V1_STR}/docs"
     }
 
@@ -154,10 +157,10 @@ async def root_openapi_redirect():
 @app.get(f"{settings.API_V1_STR}/health")
 async def health_check():
     return {
-        "status": "HEALTHY",
+        "status": STATUS_HEALTHY,
         "timestamp": datetime.datetime.now().isoformat(),
         "version": "5.0.0-hardened",
-        "database": "CONNECTED",
+        "database": DB_CONNECTED,
         "orchestrator_status": orchestrator_engine.status
     }
 
