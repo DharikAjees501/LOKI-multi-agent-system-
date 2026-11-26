@@ -166,7 +166,6 @@ async def get_scenario_events(id: str):
     return simulation_service.get_feed_events(id)
 
 @router.get("/simulation/feed")
-@router.get("/api/simulation/feed")
 async def get_simulation_feed(
     scenario_id: Optional[str] = Query(None),
     channel: Optional[str] = Query(None),
@@ -235,6 +234,19 @@ class RunSimulationRequest(BaseModel):
 @router.post("/scenarios/{id}/run-baseline")
 async def run_live_simulation(id: str, payload: Optional[RunSimulationRequest] = None):
     p = payload or RunSimulationRequest()
+    
+    # Invalidate any previously cached report so the new simulation produces fresh synthesis upon completion
+    conn_clr = get_db_connection()
+    try:
+        cur_clr = conn_clr.cursor()
+        execute_query(cur_clr, "DELETE FROM reports WHERE scenario_id = ?", (id,))
+        execute_query(cur_clr, "DELETE FROM scenario_reports WHERE scenario_id = ?", (id,))
+        conn_clr.commit()
+    except Exception as err:
+        logger.warning(f"[Simulation API] Error clearing prior reports for {id}: {err}")
+    finally:
+        conn_clr.close()
+
     agents = persona_service.generate_personas_for_scenario(id, total_agents=200)
     asyncio.create_task(
         oasis_engine.run_full_simulation(
@@ -254,46 +266,7 @@ async def run_live_simulation(id: str, payload: Optional[RunSimulationRequest] =
         "message": BASELINE_SIMULATION_DISPATCHED
     }
 
-class WhatIfSimulationRequest(BaseModel):
-    goal_prompt: Optional[str] = "What if mid-sized transport operators initiate an immediate boycott and antitrust petition against hardware transponder costs?"
-    shock_event: Optional[str] = None
-    risk_threshold: Optional[float] = 40.0
 
-@router.post("/scenarios/{id}/run-what-if")
-@router.post("/api/scenarios/{id}/run-what-if")
-async def run_what_if_simulation(id: str, payload: WhatIfSimulationRequest):
-    """
-    Phase 2: Phase B What-If Re-Simulation (Run 2)
-    Clears previous simulation steps/events, resets agent stance baselines,
-    injects Round 3 shock event synthesized from What-If prompt, and recalculates stressed metrics.
-    """
-    goal = payload.goal_prompt or "What if mid-sized transport operators initiate an immediate boycott and antitrust petition against hardware transponder costs?"
-    shock = payload.shock_event or f"CRITICAL SHOCK: Mid-sized transport operators initiate immediate boycott & antitrust petition regarding hardware transponder costs!"
-    thresh = payload.risk_threshold or 40.0
-
-    agents = persona_service.generate_personas_for_scenario(id, total_agents=200)
-
-    asyncio.create_task(
-        oasis_engine.run_full_simulation(
-            scenario_id=id,
-            agents=agents,
-            goal_prompt=goal,
-            shock_event=shock,
-            risk_threshold=thresh,
-            is_what_if=True
-        )
-    )
-
-    return {
-        "scenario_id": id,
-        "status": STATUS_RUNNING_WHAT_IF,
-        "total_rounds": 5,
-        "agent_count": len(agents),
-        "goal_prompt": goal,
-        "shock_event": shock,
-        "risk_threshold": thresh,
-        "message": WHAT_IF_SIMULATION_DISPATCHED
-    }
 
 
 

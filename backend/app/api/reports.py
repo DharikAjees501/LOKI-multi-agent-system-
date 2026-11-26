@@ -32,7 +32,6 @@ class ReportChatRequest(BaseModel):
     history: list[dict[str, str]] = Field(default_factory=list)
 
 @router.post("/reports/tts")
-@router.post("/api/reports/tts")
 async def generate_edge_tts_audio(payload: TTSStreamRequest):
     """
     Streams studio-quality neural MP3 audio generated via Microsoft Edge TTS (free & open source).
@@ -68,7 +67,6 @@ async def generate_edge_tts_audio(payload: TTSStreamRequest):
         raise HTTPException(status_code=500, detail=tts_speech_error(err))
 
 @router.get("/reports/tts/voices")
-@router.get("/api/reports/tts/voices")
 async def get_edge_tts_voices():
     """
     Returns curated high-definition Edge TTS neural voices for executive briefings (Male & Female).
@@ -152,7 +150,6 @@ async def export_scenario_report(id: str, format: str = Query("json")):
     return report_service.get_report_for_scenario(clean_id)
 
 @router.get("/reports/summary")
-@router.get("/api/reports/summary")
 async def get_report_summary(scenario_id: str | None = Query(None)):
     scen_id = scenario_id
     if not scen_id or scen_id == "scen-01":
@@ -325,7 +322,6 @@ async def get_latest_report():
     return report_service.get_report_for_scenario("scen-01")
 
 @router.post("/reports/{scenario_id}/chat")
-@router.post("/api/reports/{scenario_id}/chat")
 async def chat_with_report_agent(scenario_id: str, payload: ReportChatRequest):
     """
     Interactive 'Chat with ReportAgent' (MiroFish Stage 5 Deep Interaction).

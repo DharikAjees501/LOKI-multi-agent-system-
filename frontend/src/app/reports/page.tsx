@@ -96,7 +96,7 @@ function ReportsContent({
     }
   };
 
-  const loadReport = () => {
+  const loadReport = (isSilent = false) => {
     const doc = getActiveDocName();
     if (!doc) {
       setReport(null);
@@ -109,11 +109,16 @@ function ReportsContent({
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // Only show full-page loading spinner on initial load when no report exists yet
+    if (!isSilent && !report) {
+      setLoading(true);
+    }
     reportApi
       .getExecutiveReport(activeId, currentRound)
       .then((data) => {
-        setReport(data);
+        if (data) {
+          setReport(data);
+        }
       })
       .catch((err) => {
         console.error("[ReportsPage] Exception fetching executive report:", err);
@@ -125,15 +130,18 @@ function ReportsContent({
 
   useEffect(() => {
     syncDoc().then(() => loadReport());
+    let debounceTimer: any = null;
     const handleDocUpdated = () => {
-      setTimeout(() => {
-        syncDoc().then(() => loadReport());
-      }, 50);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        syncDoc().then(() => loadReport(true));
+      }, 100);
     };
     window.addEventListener("swarmlens_doc_updated", handleDocUpdated);
     window.addEventListener("scenario_changed", handleDocUpdated);
     window.addEventListener("simulation_completed", handleDocUpdated);
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       window.removeEventListener("swarmlens_doc_updated", handleDocUpdated);
       window.removeEventListener("scenario_changed", handleDocUpdated);
       window.removeEventListener("simulation_completed", handleDocUpdated);
@@ -141,7 +149,9 @@ function ReportsContent({
   }, []);
 
   useEffect(() => {
-    loadReport();
+    if (report) {
+      loadReport(true);
+    }
   }, [currentRound]);
 
   if (activeDoc && (loading || !report)) {
@@ -216,50 +226,6 @@ function ReportsContent({
     ""
   ).trim();
 
-  // Live Structured Key Risks
-  const candidateKeyRisks = (
-    (activeReport as any)?.key_risks ||
-    activeReport?.keyRisks ||
-    []
-  );
-
-  const rawKeyRisks: StructuredRiskItem[] = candidateKeyRisks.map((riskItem: any, idx: number) => {
-    if (typeof riskItem === "object" && riskItem !== null) {
-      return {
-        title: riskItem.title || `Risk Vector ${idx + 1}`,
-        plain_explanation:
-          riskItem.plain_explanation ||
-          riskItem.plainExplanation ||
-          riskItem.detail ||
-          riskItem.description ||
-          "",
-        severity: riskItem.severity || (idx === 0 ? "CRITICAL SEVERITY" : "HIGH SEVERITY"),
-        impacted_group:
-          riskItem.impacted_group ||
-          riskItem.impactedGroup ||
-          "Operational & Governance Leads",
-        evidence_quote:
-          riskItem.evidence_quote ||
-          riskItem.evidenceQuote ||
-          riskItem.quote ||
-          "",
-        score: riskItem.score,
-        impacted_agents:
-          riskItem.impacted_agents ||
-          riskItem.impactedAgentsCount ||
-          riskItem.impacted_agents_count,
-      };
-    }
-    const str = String(riskItem);
-    const hasColon = str.includes(":");
-    return {
-      title: hasColon ? str.substring(0, str.indexOf(":")).trim() : `Risk Vector ${idx + 1}`,
-      plain_explanation: hasColon ? str.substring(str.indexOf(":") + 1).trim() : str,
-      severity: idx === 0 ? "CRITICAL SEVERITY" : "HIGH SEVERITY",
-      impacted_group: "Operational & Governance Leads",
-    };
-  });
-
   // Live Structured Action Playbook
   const rawPlaybook: PlaybookItem[] =
     (activeReport as any)?.action_playbook ||
@@ -292,7 +258,7 @@ function ReportsContent({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-32">
-      <ScenarioStatusBanner onScenarioCompleted={loadReport} />
+      <ScenarioStatusBanner onScenarioCompleted={() => loadReport(true)} />
       {!activeDoc ? (
         <div className="rounded-3xl border border-dashed border-line bg-surface p-12 flex flex-col items-center justify-center text-center space-y-5 my-12">
           <div className="h-16 w-16 rounded-2xl bg-accent/10 border border-accent/30 text-accent flex items-center justify-center shadow-lg shadow-accent/10">
@@ -515,76 +481,7 @@ function ReportsContent({
                 </p>
               </div>
 
-              {/* Section 2: Key Business Risks Identified */}
-              <div className="rounded-3xl border border-line bg-surface p-6 space-y-4 shadow-xl">
-                <div className="flex items-center justify-between border-b border-line pb-2.5">
-                  <h3 className="font-display text-base font-bold text-ink flex items-center gap-2">
-                    <ShieldAlert className="h-4 w-4 text-accent2" /> Key Business Risks Identified
-                  </h3>
-                  <span className="text-[10px] font-mono text-muted uppercase">Domain-Grounded Threat Analysis</span>
-                </div>
-
-                {rawKeyRisks.length === 0 ? (
-                  <p className="text-xs text-muted font-mono py-4 text-center">
-                    No critical risk vectors identified in this deliberation cycle.
-                  </p>
-                ) : (
-                  <div className="space-y-4">
-                    {rawKeyRisks.map((riskItem: StructuredRiskItem, idx: number) => {
-                      const title = riskItem.title || `Risk Vector ${idx + 1}`;
-                      const plainExplanation = riskItem.plain_explanation || riskItem.detail || "";
-                      const severity = riskItem.severity || (idx === 0 ? "CRITICAL SEVERITY" : "HIGH SEVERITY");
-                      const impactedGroup = riskItem.impacted_group || "Operational & Governance Leads";
-                      const evidenceQuote = riskItem.evidence_quote;
-
-                      return (
-                        <div
-                          key={idx}
-                          className="p-4.5 rounded-2xl bg-base border border-line space-y-3 shadow-sm hover:border-accent/30 transition-colors"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <h4 className="font-display text-sm font-bold text-ink leading-snug">
-                              {idx + 1}. {title}
-                            </h4>
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase shrink-0 border ${
-                                severity.includes("CRITICAL")
-                                  ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
-                                  : "bg-amber-500/15 text-amber-400 border-amber-500/30"
-                              }`}
-                            >
-                              {severity}
-                            </span>
-                          </div>
-
-                          {/* Impacted Stakeholder Group */}
-                          <div className="flex items-center gap-1.5 text-[11px] font-mono text-muted">
-                            <Users className="h-3 w-3 text-accent" />
-                            <span>Impacted: <strong className="text-ink font-semibold">{impactedGroup}</strong></span>
-                          </div>
-
-                          {/* Plain Explanation */}
-                          {plainExplanation && (
-                            <p className="text-xs text-ink/90 leading-relaxed font-body">
-                              {plainExplanation}
-                            </p>
-                          )}
-
-                          {/* Quoted Evidence */}
-                          {evidenceQuote && (
-                            <div className="p-3 rounded-xl bg-surface/80 border-l-2 border-accent text-[11px] text-muted italic flex items-start gap-2.5 shadow-sm">
-                              <Quote className="h-3.5 w-3.5 text-accent shrink-0 mt-0.5" />
-                              <span>&ldquo;{evidenceQuote}&rdquo;</span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Section 3: Recommended Action Playbook */}
+              {/* Section 2: Recommended Action Playbook */}
               <div className="rounded-3xl border border-line bg-surface p-6 space-y-4 shadow-xl">
                 <div className="flex items-center justify-between border-b border-line pb-2.5">
                   <h3 className="font-display text-base font-bold text-ink flex items-center gap-2">
@@ -625,7 +522,7 @@ function ReportsContent({
                             </span>
                           </div>
 
-                          <p className="text-xs text-ink/90 leading-relaxed font-body">
+                          <p className="text-xs text-ink/90 leading-relaxed font-body whitespace-pre-line">
                             {playItem.action}
                           </p>
                         </div>
@@ -744,7 +641,7 @@ function ReportsContent({
                                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
                                   {title}
                                 </p>
-                                <p className="leading-relaxed text-ink/80 pl-3">
+                                <p className="leading-relaxed text-ink/80 pl-3 whitespace-pre-line">
                                   {desc}
                                 </p>
                               </div>
@@ -775,7 +672,7 @@ function ReportsContent({
                                   <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0" />
                                   {title}
                                 </p>
-                                <p className="leading-relaxed text-ink/80 pl-3">
+                                <p className="leading-relaxed text-ink/80 pl-3 whitespace-pre-line">
                                   {desc}
                                 </p>
                               </div>
@@ -796,7 +693,7 @@ function ReportsContent({
                             {rawTradeoff.verdict}
                           </span>
                         </div>
-                        <p className="text-xs text-ink font-body leading-relaxed">
+                        <p className="text-xs text-ink font-body leading-relaxed whitespace-pre-line">
                           {rawTradeoff.verdict_explanation || (rawTradeoff as any).verdictExplanation}
                         </p>
                       </div>

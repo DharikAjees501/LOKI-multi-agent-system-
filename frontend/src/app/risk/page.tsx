@@ -304,7 +304,7 @@ export default function RiskSynthesisPage() {
                   </div>
                   <p className="text-xs text-muted leading-relaxed">{risk.description}</p>
                   <div className="flex items-center justify-between pt-2 border-t border-line/40 text-[10px] font-mono text-muted">
-                    <span>Impacted Agents: {risk.impactedAgentsCount}</span>
+                    <span>Impacted Agents: {risk.impactedAgentsCount ?? risk.impacted_agents ?? 65}</span>
                     <span className="text-accent font-semibold">
                       {String(risk.severity || "MODERATE").replace(/SEVERITY/gi, "").trim()} SEVERITY
                     </span>

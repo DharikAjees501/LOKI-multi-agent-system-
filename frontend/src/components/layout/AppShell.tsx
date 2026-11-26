@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { Header } from "@/components/layout/Header";
-import { TimelineScrubber } from "@/components/timeline/TimelineScrubber";
 import { DocumentUploadModal } from "@/components/upload/DocumentUploadModal";
 import { AgentInterrogationModal } from "@/components/interrogation/AgentInterrogationModal";
 import { ApiKeyGateModal } from "@/components/auth/ApiKeyGateModal";
@@ -147,73 +146,102 @@ export const AppShell: React.FC<AppShellProps> = ({ title, subtitle, children })
 
   // Progressive simulation round sync with real backend execution
   useEffect(() => {
-    let interval: any;
-    if (simulationStatus === "RUNNING") {
-      const syncWithBackend = async () => {
-        try {
-          const currentId = getActiveScenarioId();
-          if (!currentId) {
-            setSimulationStatus("IDLE");
-            if (typeof window !== "undefined") {
-              localStorage.setItem("SWARMLENS_SIM_STATUS", "IDLE");
-              localStorage.setItem("LOKI_SIM_STATUS", "IDLE");
-            }
-            return;
-          }
-          const scens = await scenarioApi.getScenarios();
-          const currentScen = scens.find((s: any) => s.id === currentId);
-          if (!currentScen) {
-            setSimulationStatus("IDLE");
-            if (typeof window !== "undefined") {
-              localStorage.setItem("SWARMLENS_SIM_STATUS", "IDLE");
-              localStorage.setItem("LOKI_SIM_STATUS", "IDLE");
-            }
-            return;
-          }
+    let interval: any = null;
 
-          const st = currentScen.status || "";
-          if (st.includes("ROUND_")) {
-            const match = st.match(/ROUND_(\d+)/);
-            if (match) {
-              const rNum = parseInt(match[1], 10);
+    const syncWithBackend = async () => {
+      try {
+        const currentId = getActiveScenarioId();
+        if (!currentId) return;
+
+        const scens = await scenarioApi.getScenarios();
+        const currentScen = scens.find((s: any) => s.id === currentId);
+        if (!currentScen) return;
+
+        const st = (currentScen.status || "").trim();
+        const isRunning = st === "GENERATING_GRAPH" || st === "SIMULATING" || st.startsWith("RUNNING");
+
+        if (st.includes("ROUND_")) {
+          const match = st.match(/ROUND_(\d+)/);
+          if (match) {
+            const rNum = parseInt(match[1], 10);
+            if (!isNaN(rNum) && rNum >= 1 && rNum <= 5) {
               setCurrentRound(rNum);
+              setSimulationStatus("RUNNING");
               if (typeof window !== "undefined") {
                 localStorage.setItem("SWARMLENS_CURRENT_ROUND", rNum.toString());
                 localStorage.setItem("LOKI_CURRENT_ROUND", rNum.toString());
+                localStorage.setItem("SWARMLENS_SIM_STATUS", "RUNNING");
+                localStorage.setItem("LOKI_SIM_STATUS", "RUNNING");
               }
             }
           }
+        } else if (isRunning) {
+          setSimulationStatus("RUNNING");
+          if (typeof window !== "undefined") {
+            localStorage.setItem("SWARMLENS_SIM_STATUS", "RUNNING");
+            localStorage.setItem("LOKI_SIM_STATUS", "RUNNING");
+          }
+        }
 
-          if (["COMPLETED", "BASELINE_COMPLETED", "WHAT_IF_COMPLETED"].includes(st as string)) {
-            setCurrentRound(totalRounds);
-            setSimulationStatus("COMPLETED");
-            if (typeof window !== "undefined") {
-              localStorage.setItem("LOKI_CURRENT_ROUND", totalRounds.toString());
-              localStorage.setItem("LOKI_SIM_STATUS", "COMPLETED");
-              localStorage.setItem("SWARMLENS_CURRENT_ROUND", totalRounds.toString());
-              localStorage.setItem("SWARMLENS_SIM_STATUS", "COMPLETED");
+        if (["COMPLETED", "BASELINE_COMPLETED", "WHAT_IF_COMPLETED"].includes(st)) {
+          setCurrentRound(totalRounds);
+          const wasCompleted = typeof window !== "undefined" && localStorage.getItem("SWARMLENS_SIM_STATUS") === "COMPLETED";
+          setSimulationStatus("COMPLETED");
+          if (typeof window !== "undefined") {
+            localStorage.setItem("LOKI_CURRENT_ROUND", totalRounds.toString());
+            localStorage.setItem("LOKI_SIM_STATUS", "COMPLETED");
+            localStorage.setItem("SWARMLENS_CURRENT_ROUND", totalRounds.toString());
+            localStorage.setItem("SWARMLENS_SIM_STATUS", "COMPLETED");
+            // Only fire the completion event ONCE!
+            if (!wasCompleted) {
               window.dispatchEvent(new Event("simulation_completed"));
               window.dispatchEvent(new Event("scenario_changed"));
             }
-          } else if ((st as string) === "FAILED") {
-            setSimulationStatus("IDLE");
-            if (typeof window !== "undefined") {
-              localStorage.setItem("SWARMLENS_SIM_STATUS", "IDLE");
-              localStorage.setItem("LOKI_SIM_STATUS", "IDLE");
-            }
           }
-        } catch (err) {
-          console.warn("[AppShell] Simulation status polling notice:", err);
+          // Stop polling once finished!
+          if (interval) {
+            clearInterval(interval);
+            interval = null;
+          }
+        } else if (st === "FAILED" || st === "READY" || st === "CONFIGURED") {
+          setSimulationStatus("IDLE");
+          if (typeof window !== "undefined") {
+            localStorage.setItem("SWARMLENS_SIM_STATUS", "IDLE");
+            localStorage.setItem("LOKI_SIM_STATUS", "IDLE");
+          }
+          if (interval) {
+            clearInterval(interval);
+            interval = null;
+          }
         }
-      };
+      } catch (err) {
+        console.warn("[AppShell] Simulation status polling notice:", err);
+      }
+    };
 
+    syncWithBackend().then(() => {
+      // Start polling only if running
+      const currentStatus = typeof window !== "undefined" ? localStorage.getItem("SWARMLENS_SIM_STATUS") : null;
+      if (currentStatus === "RUNNING") {
+        interval = setInterval(syncWithBackend, 2500);
+      }
+    });
+
+    const handleSimulationTrigger = () => {
+      if (interval) clearInterval(interval);
       syncWithBackend();
-      interval = setInterval(syncWithBackend, 2000);
-    }
+      interval = setInterval(syncWithBackend, 2500);
+    };
+
+    window.addEventListener("swarmlens_start_simulation", handleSimulationTrigger);
+    window.addEventListener("loki_start_simulation", handleSimulationTrigger);
+
     return () => {
       if (interval) clearInterval(interval);
+      window.removeEventListener("swarmlens_start_simulation", handleSimulationTrigger);
+      window.removeEventListener("loki_start_simulation", handleSimulationTrigger);
     };
-  }, [simulationStatus, totalRounds]);
+  }, [totalRounds]);
 
   const hasUploadedDoc = () => {
     if (typeof window === "undefined") return false;
@@ -252,26 +280,6 @@ export const AppShell: React.FC<AppShellProps> = ({ title, subtitle, children })
   const handleReset = () => {
     setCurrentRound(1);
     setSimulationStatus("IDLE");
-  };
-
-  const handleSelectRound = (round: number) => {
-    if (!hasUploadedDoc()) {
-      setIsUploadOpen(true);
-      return;
-    }
-    setCurrentRound(round);
-  };
-
-  const handleStepForward = () => {
-    if (!hasUploadedDoc()) {
-      setIsUploadOpen(true);
-      return;
-    }
-    setCurrentRound((prev) => Math.min(totalRounds, prev + 1));
-  };
-
-  const handleStepBackward = () => {
-    setCurrentRound((prev) => Math.max(1, prev - 1));
   };
 
   const handleInterrogate = (agent: Agent) => {
@@ -316,22 +324,6 @@ export const AppShell: React.FC<AppShellProps> = ({ title, subtitle, children })
             onInterrogateAgent: handleInterrogate,
           })}
         </main>
-
-        {/* Bottom Timeline Scrubber Container */}
-        {mounted && hasUploadedDoc() && (
-          <div className="p-3.5 border-t border-line bg-base flex justify-center items-center shrink-0 z-20">
-            <TimelineScrubber
-              currentRound={currentRound}
-              totalRounds={totalRounds}
-              simulationStatus={simulationStatus}
-              onSelectRound={handleSelectRound}
-              onPlay={handlePlay}
-              onPause={handlePause}
-              onStepForward={handleStepForward}
-              onStepBackward={handleStepBackward}
-            />
-          </div>
-        )}
       </div>
 
       {/* API Key Modal on Quota Exceeded or Manual Open */}

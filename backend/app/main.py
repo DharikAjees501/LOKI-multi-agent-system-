@@ -4,7 +4,6 @@ import json
 from contextlib import asynccontextmanager
 
 from app.api import agents, auth, documents, graph, keys, reports, scenarios, simulation
-from app.api.keys import ConfigVerifyRequest, verify_keys_config_route
 from app.core.config import settings
 from app.core.logging import logger, setup_logging
 from app.core.rate_limiter import RateLimitMiddleware
@@ -118,23 +117,6 @@ app.include_router(simulation.router, prefix=settings.API_V1_STR)
 app.include_router(reports.router, prefix=settings.API_V1_STR)
 app.include_router(keys.router, prefix=settings.API_V1_STR)
 app.include_router(auth.router, prefix=settings.API_V1_STR)
-
-# Direct fallback mounts at root / for resilient client routing
-app.include_router(keys.router)
-app.include_router(documents.router)
-app.include_router(scenarios.router)
-app.include_router(graph.router)
-app.include_router(agents.router)
-app.include_router(simulation.router)
-app.include_router(reports.router)
-app.include_router(auth.router)
-
-@app.post("/config/verify-key")
-@app.post(f"{settings.API_V1_STR}/config/verify-key")
-async def verify_key_config_alias(request: Request):
-    body = await request.json()
-    req = ConfigVerifyRequest(**body)
-    return await verify_keys_config_route(req)
 
 @app.get("/")
 async def root():
