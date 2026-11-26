@@ -1679,161 +1679,10 @@ SUPPORTING PERSPECTIVES:
 
     def get_turning_points(self, scenario_id: str) -> List[Dict[str, Any]]:
         """
-        Identifies real simulation rounds where sentiment shifted, risk level jumped, or cascades occurred.
-        Strictly dynamically synthesized from simulation telemetry, feed events, and agent debate.
+        Turning points section has been completely removed from executive forecast reports.
+        Returns an empty list to safely preserve API contract compatibility.
         """
-        conn = get_db_connection()
-        try:
-            cursor = conn.cursor()
-
-            # 1. Fetch scenario and document context
-            cursor.execute("SELECT name, description, document_id FROM scenarios WHERE id = ?", (scenario_id,))
-            scen = cursor.fetchone()
-            scenario_name = scen["name"] if scen and scen["name"] else "Enterprise Scenario"
-            doc_id = scen["document_id"] if scen and scen["document_id"] else "Document"
-            document_name = "Strategy_Brief.pdf"
-            if doc_id and doc_id != "doc-default":
-                cursor.execute("SELECT filename FROM documents WHERE id = ?", (doc_id,))
-                d_row = cursor.fetchone()
-                if d_row and d_row["filename"]:
-                    document_name = d_row["filename"]
-                else:
-                    document_name = doc_id
-
-            clean_doc_title = document_name.replace(".pdf", "").replace("_", " ")
-
-            cursor.execute(
-                """
-                SELECT round_number as round, numerical_stance, action_type, content, archetype, faction
-                FROM oasis_simulation_steps
-                WHERE scenario_id = ? OR id LIKE ?
-                ORDER BY round_number ASC
-                """,
-                (scenario_id, f"%{scenario_id}%")
-            )
-            rows = cursor.fetchall()
-
-            if not rows:
-                cursor.execute(
-                    """
-                    SELECT round, role as archetype, channel as faction, message as content,
-                           CASE WHEN sentiment = 'CRITICAL' THEN -0.6
-                                WHEN sentiment = 'NEGATIVE' THEN -0.3
-                                WHEN sentiment = 'POSITIVE' THEN 0.35
-                                ELSE 0.0 END as numerical_stance
-                    FROM feed_events
-                    WHERE scenario_id = ?
-                    ORDER BY round ASC
-                    """,
-                    (scenario_id,)
-                )
-                rows = cursor.fetchall()
-
-            cursor.execute("SELECT COUNT(*) as cnt FROM agents WHERE scenario_id = ?", (scenario_id,))
-            a_row = cursor.fetchone()
-            agent_count = a_row["cnt"] if a_row and a_row["cnt"] > 0 else 200
-        finally:
-            conn.close()
-
-        round_data: Dict[int, List[Dict[str, Any]]] = {}
-        for r in rows:
-            rnd = r.get("round") or 1
-            if rnd not in round_data:
-                round_data[rnd] = []
-            round_data[rnd].append(r)
-
-        # Ensure rounds 1 through 5 are represented
-        for expected_rnd in range(1, 6):
-            if expected_rnd not in round_data:
-                round_data[expected_rnd] = []
-
-        turning_points = []
-        for rnd in range(1, 6):
-            r_steps = round_data.get(rnd, [])
-            tot = max(len(r_steps), 1)
-
-            # Filter out rogue personas (Never revive out-of-domain personas!)
-            valid_steps = [s for s in r_steps if not is_out_of_domain_persona(s.get("archetype") or "", document_name)]
-
-            opp_steps = [s for s in valid_steps if (s.get("numerical_stance") or 0) <= -0.15]
-            supp_steps = [s for s in valid_steps if (s.get("numerical_stance") or 0) >= 0.15]
-
-            opp_count = len(opp_steps)
-            opp_pct = round((opp_count / tot) * 100, 1) if tot > 0 else (5.0 * rnd)
-            avg_stance = round(sum((s.get("numerical_stance") or 0) for s in r_steps) / tot, 2) if r_steps else (0.00 if rnd == 1 else -0.05 * rnd)
-
-            top_opp = opp_steps[0] if opp_steps else (valid_steps[-1] if valid_steps else None)
-            opp_role = top_opp.get("archetype") if top_opp and top_opp.get("archetype") else "Operational Stakeholders"
-            opp_faction = top_opp.get("faction") if top_opp and top_opp.get("faction") else "OPERATIONS"
-            opp_msg = (top_opp.get("content") or "").strip().replace('"', '').replace('\n', ' ') if top_opp else ""
-            opp_snippet = opp_msg.split(".")[0].strip()
-            if len(opp_snippet) > 85:
-                opp_snippet = opp_snippet[:82] + "..."
-
-            top_supp = supp_steps[0] if supp_steps else (valid_steps[0] if valid_steps else None)
-            supp_role = top_supp.get("archetype") if top_supp and top_supp.get("archetype") else "Strategic Leadership"
-            supp_msg = (top_supp.get("content") or "").strip().replace('"', '').replace('\n', ' ') if top_supp else ""
-            supp_snippet = supp_msg.split(".")[0].strip()
-            if len(supp_snippet) > 85:
-                supp_snippet = supp_snippet[:82] + "..."
-
-            if rnd == 1:
-                event_name = "Baseline Swarm Ingestion & Stance Formation"
-                reason_str = f"Extracted {tot} autonomous persona nodes from '{document_name}' knowledge graph."
-                impact_str = (
-                    f"The {agent_count}-agent swarm ingested core modules from '{clean_doc_title}', establishing a baseline with {avg_stance:+.2f} average stance and {opp_pct}% initial hesitation. "
-                    f"While {supp_role} expressed early alignment behind capability acceleration (\"{supp_snippet or 'Favorable preliminary alignment'}\"), "
-                    f"{opp_role} ({opp_faction}) registered immediate procedural inquiries: \"{opp_snippet or 'Preliminary friction noted regarding implementation scope'}\". "
-                    f"Early deliberation revealed that while strategic leadership welcomes operational speed, technical and frontline evaluators demand strict validation of automated boundaries before proceeding."
-                )
-                sev_str = "LOW"
-            elif rnd == 2:
-                event_name = "Cross-Channel Deliberation & Peer Contagion"
-                reason_str = f"Cross-channel deliberation active across {tot} operational and executive agents."
-                impact_str = (
-                    f"Cross-channel debate intensified across operational and governance channels, shifting stance dispersion to {avg_stance:+.2f} with {opp_count} agent nodes actively resisting baseline assumptions. "
-                    f"Procedural concerns gained momentum as {opp_role} challenged execution safeguards: \"{opp_snippet or 'Operational friction escalated across active nodes'}\". "
-                    f"While {supp_role} advocated for structured adoption pilots, peer contagion caused caution to spread into adjacent administrative clusters."
-                )
-                sev_str = "MODERATE" if opp_pct >= 25 else "LOW"
-            elif rnd == 3:
-                event_name = "Round 3 Shock Injection & Vulnerability Cascade"
-                reason_str = f"Simulated operational stress conditions applied across all {tot} deliberation channels."
-                impact_str = (
-                    f"Simulated operational stress triggered acute resistance, causing opposition to breach threshold at {opp_pct}% dissent ({opp_count} vocal agents). "
-                    f"Strongest friction was articulated by {opp_role}, issuing an operational warning: \"{opp_snippet or 'Critical procedural risk exposed during operational stress testing'}\". "
-                    f"This round proved to be the decisive inflection point of the simulation, exposing systemic vulnerabilities that must be mitigated prior to live release."
-                )
-                sev_str = "CRITICAL" if opp_pct >= 40 else "HIGH"
-            elif rnd == 4:
-                event_name = "Catalyst Bridge Node Diffusion & Mitigation"
-                reason_str = "High-centrality leadership and operational bridge nodes proposed mitigation frameworks."
-                impact_str = (
-                    f"Deliberation began stabilizing as high-centrality executive and technical nodes proposed structured mitigation frameworks, modulating stance to {avg_stance:+.2f}. "
-                    f"Stakeholders deliberated whether policy controls could adequately resolve the objections voiced by {opp_role}: \"{opp_snippet or 'Stakeholders reviewed control architectures'}\". "
-                    f"A workable consensus emerged indicating that deterministic validation checkpoints and clear governance can adequately safeguard production operations."
-                )
-                sev_str = "MODERATE" if opp_pct >= 25 else "LOW"
-            else: # rnd == 5
-                event_name = "Final Consensus Equilibrium & Threshold Outcome"
-                reason_str = f"Simulation completed across all 5 operational cycles for '{scenario_name}'."
-                impact_str = (
-                    f"The simulation reached steady-state equilibrium, codifying a final Scenario Risk Score of {int(round(opp_pct))}/100 with {opp_pct}% opposing parameter execution. "
-                    f"While {supp_role} maintained strategic backing, persistent opposition led by {opp_role} (\"{opp_snippet or 'Conditional release requirements maintained'}\") enforces strict release conditionality. "
-                    f"The consensus delivers a Conditional Go mandate: rollout under '{clean_doc_title}' is commercially viable only after deploying mandatory verification gates and stakeholder review protocols."
-                )
-                sev_str = "CRITICAL" if opp_pct >= 60 else ("HIGH" if opp_pct >= 35 else "MODERATE")
-
-            turning_points.append({
-                "id": f"tp-0{rnd}",
-                "round": rnd,
-                "event": event_name,
-                "reason": reason_str,
-                "impact": impact_str,
-                "severity": sev_str
-            })
-
-        return turning_points
+        return []
 
     def get_report_for_scenario(self, scenario_id: str, round_num: Optional[int] = None) -> Optional[Dict[str, Any]]:
         """
@@ -1918,6 +1767,9 @@ SUPPORTING PERSPECTIVES:
                     saved_payload["riskScore"] = rep_row["risk_score"]
                 if not saved_payload.get("generatedAt"):
                     saved_payload["generatedAt"] = datetime.now().strftime("%d %b %Y, %H:%M EST")
+                saved_payload["turning_points"] = []
+                saved_payload["turningPoints"] = []
+                saved_payload["criticalTurningPoints"] = []
                 logger.info(f"[ReportService] Returning cached synthesized executive report from database for scenario '{scenario_id}' (0 LLM tokens consumed).")
                 return saved_payload
 

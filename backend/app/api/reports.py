@@ -4,10 +4,11 @@ from typing import Any
 
 import edge_tts
 from app.core.logging import logger
+from app.core.security import get_optional_current_user, verify_scenario_access
 from app.engine.llm_client import execute_multi_provider_llm_call
 from app.services.report_service import report_service
 from app.storage.database import get_db_connection
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from constants.error import (
@@ -92,8 +93,14 @@ def validate_scenario_id(scenario_id: str) -> str:
     return scenario_id.strip()
 
 @router.get("/scenarios/{id}/report")
-async def get_scenario_report(id: str, round: int | None = Query(None)):
+async def get_scenario_report(
+    id: str,
+    round: int | None = Query(None),
+    current_user: dict[str, Any] | None = Depends(get_optional_current_user)
+):
     clean_id = validate_scenario_id(id)
+    user_id = current_user.get("id") if current_user else None
+    verify_scenario_access(clean_id, user_id)
     logger.info(f"[Reports API] Generating synthesis executive report for scenario: {clean_id} (Round: {round})")
     rep = report_service.get_report_for_scenario(clean_id, round_num=round)
     if not rep:
@@ -142,8 +149,14 @@ async def get_scenario_audio_briefing(id: str):
     return report_service.get_audio_briefing(clean_id)
 
 @router.get("/scenarios/{id}/report/export")
-async def export_scenario_report(id: str, format: str = Query("json")):
+async def export_scenario_report(
+    id: str,
+    format: str = Query("json"),
+    current_user: dict[str, Any] | None = Depends(get_optional_current_user)
+):
     clean_id = validate_scenario_id(id)
+    user_id = current_user.get("id") if current_user else None
+    verify_scenario_access(clean_id, user_id)
     if format.lower() == "pdf":
         html_content = report_service.export_report_pdf(clean_id)
         return Response(content=html_content, media_type="text/html")

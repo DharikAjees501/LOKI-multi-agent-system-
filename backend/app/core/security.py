@@ -171,8 +171,8 @@ def verify_document_access(document_id: str, user_id: Optional[str]) -> Dict[str
         doc = dict(row)
         doc_user_id = doc.get("user_id")
         # If document has a user_id and does not match current user, 404 (prevent ID enumeration)
-        if doc_user_id and user_id and doc_user_id != user_id:
-            logger.warning(log_ownership_blocked(user_id, "document", document_id, doc_user_id))
+        if doc_user_id and doc_user_id != user_id:
+            logger.warning(log_ownership_blocked(user_id or "ANONYMOUS", "document", document_id, str(doc_user_id)))
             raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
         return doc
     finally:
@@ -189,8 +189,8 @@ def verify_scenario_access(scenario_id: str, user_id: Optional[str]) -> Dict[str
         scen = dict(row)
         scen_user_id = scen.get("user_id")
         # If scenario has a user_id and does not match current user, 404 (prevent ID enumeration)
-        if scen_user_id and user_id and scen_user_id != user_id:
-            logger.warning(log_ownership_blocked(user_id, "scenario", scenario_id, scen_user_id))
+        if scen_user_id and scen_user_id != user_id:
+            logger.warning(log_ownership_blocked(user_id or "ANONYMOUS", "scenario", scenario_id, str(scen_user_id)))
             raise HTTPException(status_code=404, detail=SCENARIO_NOT_FOUND)
         return scen
     finally:

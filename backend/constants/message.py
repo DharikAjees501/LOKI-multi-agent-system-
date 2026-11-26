@@ -60,5 +60,5 @@ def log_csrf_blocked(origin: Optional[str], path: Optional[str] = None) -> str:
 def log_rate_limit_exceeded(ip: str, path: str) -> str:
     return f"Rate limit exceeded for IP {ip} on path {path}"
 
-def log_ownership_blocked(user_id: str, resource_type: str, resource_id: str, owner_id: str) -> str:
-    return f"[Ownership Guard] User {user_id} attempted access to {resource_type} {resource_id} owned by {owner_id}"
+def log_ownership_blocked(user_id: Optional[str], resource_type: str, resource_id: str, owner_id: str) -> str:
+    return f"[Ownership Guard] User {user_id or 'ANONYMOUS'} attempted access to {resource_type} {resource_id} owned by {owner_id}"

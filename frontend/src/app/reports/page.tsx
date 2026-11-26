@@ -92,7 +92,7 @@ function ReportsContent({
         ) {
           setForceComplete(true);
         }
-      } catch {}
+      } catch { }
     }
   };
 
@@ -204,8 +204,8 @@ function ReportsContent({
     (decisionVerdict === "CONDITIONAL_GO"
       ? `Conditional approval for '${activeReport?.scenarioName || "proposal"}': Establish deterministic safety gates and stakeholder onboarding before full rollout.`
       : decisionVerdict === "HOLD"
-      ? `Hold deployment for '${activeReport?.scenarioName || "proposal"}': Address critical compliance and stakeholder friction voiced by dissenting channels.`
-      : `Proceed with phased rollout for '${activeReport?.scenarioName || "proposal"}' while maintaining continuous telemetry across active channels.`);
+        ? `Hold deployment for '${activeReport?.scenarioName || "proposal"}': Address critical compliance and stakeholder friction voiced by dissenting channels.`
+        : `Proceed with phased rollout for '${activeReport?.scenarioName || "proposal"}' while maintaining continuous telemetry across active channels.`);
 
   const sentiment = (activeReport as any)?.sentimentBreakdown || {
     positive: (activeReport as any)?.pos_pct ?? 0,
@@ -248,13 +248,6 @@ function ReportsContent({
       verdict: "",
       verdict_explanation: "",
     };
-
-  // Live Critical Turning Points
-  const turningPoints: any[] =
-    activeReport?.criticalTurningPoints ||
-    (activeReport as any)?.turning_points ||
-    activeReport?.turningPoints ||
-    [];
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-32">
@@ -346,13 +339,12 @@ function ReportsContent({
               <div className="space-y-3 max-w-3xl">
                 <div className="flex flex-wrap items-center gap-3">
                   <span
-                    className={`px-3 py-1 rounded-xl text-xs font-mono font-bold tracking-wider uppercase border flex items-center gap-1.5 shadow-sm ${
-                      decisionVerdict === "GO"
+                    className={`px-3 py-1 rounded-xl text-xs font-mono font-bold tracking-wider uppercase border flex items-center gap-1.5 shadow-sm ${decisionVerdict === "GO"
                         ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
                         : decisionVerdict === "HOLD"
-                        ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
-                        : "bg-amber-500/15 text-amber-400 border-amber-500/30"
-                    }`}
+                          ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
+                          : "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                      }`}
                   >
                     {decisionVerdict === "GO" && <CheckCircle2 className="h-3.5 w-3.5" />}
                     {decisionVerdict === "HOLD" && <ShieldAlert className="h-3.5 w-3.5" />}
@@ -379,13 +371,12 @@ function ReportsContent({
                   </span>
                   <div className="flex items-baseline gap-1.5">
                     <span
-                      className={`font-display text-3xl md:text-4xl font-extrabold ${
-                        riskScore >= 70
+                      className={`font-display text-3xl md:text-4xl font-extrabold ${riskScore >= 70
                           ? "text-rose-400"
                           : riskScore >= 40
-                          ? "text-amber-400"
-                          : "text-emerald-400"
-                      }`}
+                            ? "text-amber-400"
+                            : "text-emerald-400"
+                        }`}
                     >
                       {riskScore}
                     </span>
@@ -464,9 +455,9 @@ function ReportsContent({
             </div>
           </div>
 
-          {/* TWO-COLUMN PARALLEL GRID LAYOUT */}
+          {/* TOP TWO-COLUMN GRID: STRATEGIC SYNTHESIS & BRIEFING/CHAT */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Left Column: Strategic Analysis (col-span-6) */}
+            {/* Left Column: Synthesis & Action Playbook (col-span-6) */}
             <div className="lg:col-span-6 space-y-6">
               {/* Section 1: Executive Strategic Synthesis */}
               <div className="rounded-3xl border border-line bg-surface p-6 space-y-3.5 shadow-xl">
@@ -531,230 +522,6 @@ function ReportsContent({
                   </div>
                 )}
               </div>
-
-              {/* Section 4: Key Findings & Market Pushback (What People Worry About) */}
-              <div className="rounded-3xl border border-line bg-surface p-6 space-y-4 shadow-xl">
-                <div className="flex items-center justify-between border-b border-line pb-2.5">
-                  <div>
-                    <h3 className="font-display text-base font-bold text-ink flex items-center gap-2">
-                      <MessageSquare className="h-4 w-4 text-accent" /> Key Findings & Market Pushback
-                    </h3>
-                    <p className="text-[11px] text-muted font-mono mt-0.5">
-                      What People Worry About · Major Stakeholder Trust Barriers
-                    </p>
-                  </div>
-                  <span className="text-[10px] font-mono text-muted uppercase">Verbatim Telemetry</span>
-                </div>
-
-                {rawPushback.length === 0 ? (
-                  <p className="text-xs text-muted font-mono py-4 text-center">
-                    No critical stakeholder pushback recorded in current round.
-                  </p>
-                ) : (
-                  <div className="space-y-4">
-                    {rawPushback.map((item, pbIdx) => (
-                      <div
-                        key={pbIdx}
-                        className="p-4.5 rounded-2xl bg-base border border-line space-y-3 shadow-sm hover:border-accent/40 transition-colors"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <h4 className="font-display text-sm font-bold text-ink leading-snug">
-                              {item.title}
-                            </h4>
-                            <span className="text-[11px] font-mono text-muted">
-                              Stakeholder Focus: <strong className="text-ink">{item.stakeholder_group || (item as any).stakeholderGroup}</strong>
-                            </span>
-                          </div>
-                          <span
-                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase shrink-0 border ${
-                              String(item.severity).includes("CRITICAL")
-                                ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
-                                : "bg-amber-500/15 text-amber-400 border-amber-500/30"
-                            }`}
-                          >
-                            {item.severity || "HIGH FRICTION"}
-                          </span>
-                        </div>
-
-                        {/* Verbatim Stakeholder Quote */}
-                        {item.quote && (
-                          <div className="p-3 rounded-xl bg-surface/90 border-l-2 border-accent text-xs text-ink italic flex items-start gap-2.5 shadow-inner">
-                            <Quote className="h-3.5 w-3.5 text-accent shrink-0 mt-0.5" />
-                            <span className="font-medium">&ldquo;{item.quote}&rdquo;</span>
-                          </div>
-                        )}
-
-                        {/* Detailed explanation */}
-                        {item.explanation && (
-                          <p className="text-xs text-ink/90 leading-relaxed font-body">
-                            {item.explanation}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Section 5: Strategic Trade-Off Analysis: Advantages vs. Disadvantages */}
-              <div className="rounded-3xl border border-line bg-surface p-6 space-y-5 shadow-xl">
-                <div className="flex items-center justify-between border-b border-line pb-2.5">
-                  <div>
-                    <h3 className="font-display text-base font-bold text-ink flex items-center gap-2">
-                      <Scale className="h-4 w-4 text-accent" /> Advantages vs. Disadvantages
-                    </h3>
-                    <p className="text-[11px] text-muted font-mono mt-0.5">
-                      Commercial Trade-off Analysis · Will it be helpful or not?
-                    </p>
-                  </div>
-                  <span className="text-[10px] font-mono text-muted uppercase">Viability Matrix</span>
-                </div>
-
-                {(!rawTradeoff.advantages || rawTradeoff.advantages.length === 0) &&
-                (!rawTradeoff.disadvantages || rawTradeoff.disadvantages.length === 0) ? (
-                  <p className="text-xs text-muted font-mono py-4 text-center">
-                    Commercial trade-off evaluation pending final simulation consensus.
-                  </p>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Advantages */}
-                      <div className="p-4.5 rounded-2xl bg-base border border-emerald-500/30 space-y-3 shadow-sm">
-                        <div className="flex items-center gap-2 border-b border-line/60 pb-2">
-                          <div className="h-6 w-6 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center font-bold text-xs">
-                            <ThumbsUp className="h-3.5 w-3.5" />
-                          </div>
-                          <span className="font-display text-xs font-bold text-ink uppercase tracking-wide">
-                            Key Commercial Advantages
-                          </span>
-                        </div>
-
-                        <div className="space-y-3 text-xs text-ink/90 font-body">
-                          {rawTradeoff.advantages.map((adv, aIdx) => {
-                            const parts = adv.split(":");
-                            const title = parts.length > 1 ? parts[0] : `Advantage ${aIdx + 1}`;
-                            const desc = parts.length > 1 ? parts.slice(1).join(":") : adv;
-                            return (
-                              <div key={aIdx} className="space-y-1">
-                                <p className="font-bold text-emerald-400 text-xs flex items-center gap-1.5">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
-                                  {title}
-                                </p>
-                                <p className="leading-relaxed text-ink/80 pl-3 whitespace-pre-line">
-                                  {desc}
-                                </p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Disadvantages */}
-                      <div className="p-4.5 rounded-2xl bg-base border border-rose-500/30 space-y-3 shadow-sm">
-                        <div className="flex items-center gap-2 border-b border-line/60 pb-2">
-                          <div className="h-6 w-6 rounded-lg bg-rose-500/15 text-rose-400 flex items-center justify-center font-bold text-xs">
-                            <ThumbsDown className="h-3.5 w-3.5" />
-                          </div>
-                          <span className="font-display text-xs font-bold text-ink uppercase tracking-wide">
-                            Downside Risks & Frictions
-                          </span>
-                        </div>
-
-                        <div className="space-y-3 text-xs text-ink/90 font-body">
-                          {rawTradeoff.disadvantages.map((dis, dIdx) => {
-                            const parts = dis.split(":");
-                            const title = parts.length > 1 ? parts[0] : `Disadvantage ${dIdx + 1}`;
-                            const desc = parts.length > 1 ? parts.slice(1).join(":") : dis;
-                            return (
-                              <div key={dIdx} className="space-y-1">
-                                <p className="font-bold text-rose-400 text-xs flex items-center gap-1.5">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0" />
-                                  {title}
-                                </p>
-                                <p className="leading-relaxed text-ink/80 pl-3 whitespace-pre-line">
-                                  {desc}
-                                </p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Net Executive Verdict Banner */}
-                    {rawTradeoff.verdict && (
-                      <div className="p-4.5 rounded-2xl bg-base border border-accent/40 space-y-2 shadow-md">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-mono text-muted uppercase font-bold tracking-wider">
-                            NET EXECUTIVE VERDICT (WILL IT BE HELPFUL?)
-                          </span>
-                          <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-mono text-[10px] font-bold">
-                            {rawTradeoff.verdict}
-                          </span>
-                        </div>
-                        <p className="text-xs text-ink font-body leading-relaxed whitespace-pre-line">
-                          {rawTradeoff.verdict_explanation || (rawTradeoff as any).verdictExplanation}
-                        </p>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Section 6: Critical Turning Points Stepper (R1 to R5) */}
-              <div className="rounded-3xl border border-line bg-surface p-6 space-y-4 shadow-xl">
-                <div className="flex items-center justify-between border-b border-line pb-2.5">
-                  <h3 className="font-display text-base font-bold text-ink flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-accent" /> Critical Turning Points (R1 → R5)
-                  </h3>
-                  <span className="text-[10px] font-mono text-muted uppercase">Round-by-Round Deltas</span>
-                </div>
-
-                {turningPoints.length === 0 ? (
-                  <p className="text-xs text-muted font-mono py-4 text-center">
-                    No critical turning point shocks recorded in current scenario.
-                  </p>
-                ) : (
-                  <div className="space-y-3.5 relative before:absolute before:left-3.5 before:top-3 before:bottom-3 before:w-[2px] before:bg-line/70">
-                    {turningPoints.map((tp: any, tpIdx: number) => {
-                      const roundNum = tp.round || tpIdx + 1;
-                      const severity = tp.severity || (tpIdx === 2 ? "HIGH" : "LOW");
-                      return (
-                        <div
-                          key={tp.id ? `${tp.id}-${tpIdx}` : `tp-${tpIdx}`}
-                          className="p-4 rounded-2xl bg-base border border-line flex items-start gap-3.5 relative z-10 hover:border-accent/30 transition-colors shadow-sm ml-1"
-                        >
-                          <span className="h-7 w-7 rounded-xl bg-accent/20 border border-accent/40 text-accent font-mono text-xs font-bold flex items-center justify-center shrink-0">
-                            R{roundNum}
-                          </span>
-                          <div className="min-w-0 flex-1 space-y-1.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-xs font-bold text-ink leading-snug">{tp.event || tp.title || `Round ${roundNum} Transition`}</p>
-                              <span
-                                className={`text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded-md border shrink-0 ${
-                                  severity.includes("CRITICAL")
-                                    ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
-                                    : severity.includes("HIGH")
-                                    ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
-                                    : severity.includes("MODERATE")
-                                    ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
-                                    : "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                                }`}
-                              >
-                                {severity} SEVERITY
-                              </span>
-                            </div>
-                            <p className="text-xs text-muted leading-relaxed font-body">
-                              {tp.impact || tp.description || "Sentiment trajectory transition recorded across agent factions."}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
             </div>
 
             {/* Right Column: 60-Second Audio Briefing & Interactive ReportAgent Chat (col-span-6) */}
@@ -766,6 +533,175 @@ function ReportsContent({
                 documentName={activeDoc || activeReport.documentName}
               />
             </div>
+          </div>
+
+          {/* SECTION 1: KEY FINDINGS & MARKET PUSHBACK (SINGLE FULL-WIDTH COLUMN) */}
+          <div className="rounded-3xl border border-line bg-surface p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-line pb-2.5">
+              <div>
+                <h3 className="font-display text-base font-bold text-ink flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4 text-accent" /> Key Findings & Market Pushback
+                </h3>
+                <p className="text-[11px] text-muted font-mono mt-0.5">
+                  What People Worry About · Major Stakeholder Trust Barriers
+                </p>
+              </div>
+              <span className="text-[10px] font-mono text-muted uppercase">Verbatim Telemetry</span>
+            </div>
+
+            {rawPushback.length === 0 ? (
+              <p className="text-xs text-muted font-mono py-4 text-center">
+                No critical stakeholder pushback recorded in current round.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {rawPushback.map((item, pbIdx) => (
+                  <div
+                    key={pbIdx}
+                    className="p-4.5 rounded-2xl bg-base border border-line space-y-3 shadow-sm hover:border-accent/40 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h4 className="font-display text-sm font-bold text-ink leading-snug">
+                          {item.title}
+                        </h4>
+                        <span className="text-[11px] font-mono text-muted">
+                          Stakeholder Focus: <strong className="text-ink">{item.stakeholder_group || (item as any).stakeholderGroup}</strong>
+                        </span>
+                      </div>
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase shrink-0 border ${String(item.severity).includes("CRITICAL")
+                            ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
+                            : "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                          }`}
+                      >
+                        {item.severity || "HIGH FRICTION"}
+                      </span>
+                    </div>
+
+                    {/* Verbatim Stakeholder Quote */}
+                    {item.quote && (
+                      <div className="p-3 rounded-xl bg-surface/90 border-l-2 border-accent text-xs text-ink italic flex items-start gap-2.5 shadow-inner">
+                        <Quote className="h-3.5 w-3.5 text-accent shrink-0 mt-0.5" />
+                        <span className="font-medium">&ldquo;{item.quote}&rdquo;</span>
+                      </div>
+                    )}
+
+                    {/* Detailed explanation */}
+                    {item.explanation && (
+                      <p className="text-xs text-ink/90 leading-relaxed font-body">
+                        {item.explanation}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* SECTION 2: STRATEGIC TRADE-OFF ANALYSIS (PARALLEL COLUMNS: ADVANTAGES VS DISADVANTAGES) */}
+          <div className="rounded-3xl border border-line bg-surface p-6 space-y-5 shadow-xl">
+            <div className="flex items-center justify-between border-b border-line pb-2.5">
+              <div>
+                <h3 className="font-display text-base font-bold text-ink flex items-center gap-2">
+                  <Scale className="h-4 w-4 text-accent" /> Advantages vs. Disadvantages
+                </h3>
+                <p className="text-[11px] text-muted font-mono mt-0.5">
+                  Commercial Trade-off Analysis · Will it be helpful or not?
+                </p>
+              </div>
+              <span className="text-[10px] font-mono text-muted uppercase">Viability Matrix</span>
+            </div>
+
+            {(!rawTradeoff.advantages || rawTradeoff.advantages.length === 0) &&
+              (!rawTradeoff.disadvantages || rawTradeoff.disadvantages.length === 0) ? (
+              <p className="text-xs text-muted font-mono py-4 text-center">
+                Commercial trade-off evaluation pending final simulation consensus.
+              </p>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Advantages (Parallel Column Left) */}
+                  <div className="p-4.5 rounded-2xl bg-base border border-emerald-500/30 space-y-3 shadow-sm">
+                    <div className="flex items-center gap-2 border-b border-line/60 pb-2">
+                      <div className="h-6 w-6 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center font-bold text-xs">
+                        <ThumbsUp className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="font-display text-xs font-bold text-ink uppercase tracking-wide">
+                        Key Commercial Advantages
+                      </span>
+                    </div>
+
+                    <div className="space-y-3 text-xs text-ink/90 font-body">
+                      {rawTradeoff.advantages.map((adv, aIdx) => {
+                        const parts = adv.split(":");
+                        const title = parts.length > 1 ? parts[0] : `Advantage ${aIdx + 1}`;
+                        const desc = parts.length > 1 ? parts.slice(1).join(":") : adv;
+                        return (
+                          <div key={aIdx} className="space-y-1">
+                            <p className="font-bold text-emerald-400 text-xs flex items-center gap-1.5">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                              {title}
+                            </p>
+                            <p className="leading-relaxed text-ink/80 pl-3 whitespace-pre-line">
+                              {desc}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Disadvantages (Parallel Column Right) */}
+                  <div className="p-4.5 rounded-2xl bg-base border border-rose-500/30 space-y-3 shadow-sm">
+                    <div className="flex items-center gap-2 border-b border-line/60 pb-2">
+                      <div className="h-6 w-6 rounded-lg bg-rose-500/15 text-rose-400 flex items-center justify-center font-bold text-xs">
+                        <ThumbsDown className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="font-display text-xs font-bold text-ink uppercase tracking-wide">
+                        Downside Risks & Frictions
+                      </span>
+                    </div>
+
+                    <div className="space-y-3 text-xs text-ink/90 font-body">
+                      {rawTradeoff.disadvantages.map((dis, dIdx) => {
+                        const parts = dis.split(":");
+                        const title = parts.length > 1 ? parts[0] : `Disadvantage ${dIdx + 1}`;
+                        const desc = parts.length > 1 ? parts.slice(1).join(":") : dis;
+                        return (
+                          <div key={dIdx} className="space-y-1">
+                            <p className="font-bold text-rose-400 text-xs flex items-center gap-1.5">
+                              <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0" />
+                              {title}
+                            </p>
+                            <p className="leading-relaxed text-ink/80 pl-3 whitespace-pre-line">
+                              {desc}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Net Executive Verdict Banner (Full-Width Summary) */}
+                {rawTradeoff.verdict && (
+                  <div className="p-4.5 rounded-2xl bg-base border border-accent/40 space-y-2 shadow-md">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-muted uppercase font-bold tracking-wider">
+                        NET EXECUTIVE VERDICT (WILL IT BE HELPFUL?)
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-mono text-[10px] font-bold">
+                        {rawTradeoff.verdict}
+                      </span>
+                    </div>
+                    <p className="text-xs text-ink font-body leading-relaxed whitespace-pre-line">
+                      {rawTradeoff.verdict_explanation || (rawTradeoff as any).verdictExplanation}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </>
       )}
