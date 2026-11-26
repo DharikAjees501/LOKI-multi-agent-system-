@@ -542,11 +542,11 @@ Return ONLY the raw spoken script as a single continuous paragraph of plain text
 
         # 2. One-line Verdict & Primary Concern
         one_line_verdict = (
-            f"Conditional Go for '{scenario_name}': Commercial adoption is viable provided deterministic safety checkpoints and stakeholder onboarding are deployed before rollout under '{clean_doc_title}'."
+            f"Conditional Go: Commercial adoption is viable provided safety checkpoints and stakeholder onboarding are deployed before rollout."
             if calc_verdict == "CONDITIONAL_GO" else
-            (f"Hold deployment for '{scenario_name}': Address critical operational bottlenecks and compliance pushback raised by {lead_opp_role} before releasing under '{clean_doc_title}'."
+            (f"Hold Deployment: Address operational bottlenecks and compliance pushback raised by {lead_opp_role} before release."
              if calc_verdict == "HOLD" else
-             f"Proceed with phased deployment for '{scenario_name}' while maintaining continuous telemetry across active operational channels under '{clean_doc_title}'.")
+             f"Proceed with Phased Deployment: Maintain continuous telemetry across active operational channels.")
         )
         primary_concern = f"{lead_opp_role} Pushback: {lead_opp_snippet[:42]}..."
 
@@ -2109,55 +2109,255 @@ SUPPORTING PERSPECTIVES:
 
     def export_report_pdf(self, scenario_id: str) -> str:
         """
-        Generates executive HTML formatted report for printing or PDF export.
+        Generates executive HTML formatted report with Times New Roman bold headings for printing or PDF export.
         """
         rep = self.get_report_for_scenario(scenario_id)
         if not rep:
             return "<!DOCTYPE html><html><body><h1>Scenario Not Found</h1><p>No report generated yet.</p></body></html>"
+        
+        tradeoff = rep.get("tradeoff_analysis") or rep.get("tradeoffAnalysis") or {}
+        advantages = tradeoff.get("advantages") or []
+        disadvantages = tradeoff.get("disadvantages") or []
+        net_verdict = tradeoff.get("verdict") or ""
+        net_verdict_expl = tradeoff.get("verdict_explanation") or ""
+        
+        playbook = rep.get("action_playbook") or rep.get("actionPlaybook") or []
+        pushback = rep.get("market_pushback") or rep.get("marketPushback") or []
+        key_risks = rep.get("keyRisks") or rep.get("key_risks") or []
+        rec_areas = rep.get("recommendedInvestigationAreas") or rep.get("recommended_investigation_areas") or []
+        
+        verdict = (rep.get("decisionVerdict") or rep.get("decision_verdict") or "CONDITIONAL_GO").replace("_", " ")
+        one_line = rep.get("oneLineVerdict") or rep.get("one_line_verdict") or rep.get("title") or "Autonomous Swarm Forecast"
+
+        adv_html = "".join(f"<li>{adv}</li>" for adv in advantages)
+        dis_html = "".join(f"<li>{dis}</li>" for dis in disadvantages)
+        risks_html = "".join(f"<li>{r}</li>" for r in key_risks)
+        actions_html = "".join(f"<li>{a}</li>" for a in rec_areas)
+        
+        playbook_html = "".join(
+            f"""<div class="card" style="margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 12px; margin-bottom: 4px;">
+                    <span>Action {idx+1} ({pb.get('priority', 'P1')}) - Target: {pb.get('targetRisk', 'System')}</span>
+                    <span style="color: #15803d;">Impact: -{pb.get('drop', '0')} pts risk</span>
+                </div>
+                <p style="margin: 0; font-size: 12px;">{pb.get('action', '')}</p>
+            </div>"""
+            for idx, pb in enumerate(playbook)
+        )
+
+        pushback_html = "".join(
+            f"""<div class="card" style="margin-bottom: 8px; border-left: 3px solid #ea580c;">
+                <div style="display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 2px;">
+                    <span>{p.get('stakeholderGroup', 'Stakeholders')}</span>
+                    <span style="font-size: 11px; color: #c2410c;">Resistance: {p.get('resistanceLevel', 'ELEVATED')}</span>
+                </div>
+                <p style="margin: 0 0 4px 0; font-size: 12px;"><strong>Concern:</strong> {p.get('corePushback', '')}</p>
+                {f'<p style="margin: 0; font-size: 11px; font-style: italic; color: #64748b;">"{p.get("quote")}"</p>' if p.get('quote') else ''}
+            </div>"""
+            for p in pushback
+        )
+
         html_content = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <title>{rep['title']}</title>
+    <title>{rep['title']} - {rep['scenarioName']}</title>
     <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 40px; color: #111; line-height: 1.5; }}
-        h1 {{ font-size: 24px; font-weight: bold; margin-bottom: 4px; }}
-        .meta {{ font-size: 12px; color: #666; margin-bottom: 24px; font-family: monospace; }}
-        .score-box {{ background: #f4f4f5; border: 1px solid #e4e4e7; border-radius: 12px; padding: 16px; margin-bottom: 24px; display: inline-block; }}
-        .score {{ font-size: 36px; font-weight: 800; color: #dc2626; }}
-        .section {{ margin-bottom: 24px; }}
-        h2 {{ font-size: 16px; border-bottom: 1px solid #e4e4e7; padding-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }}
-        ul {{ padding-left: 20px; }}
-        li {{ margin-bottom: 6px; font-size: 13px; }}
+        @page {{ size: A4 portrait; margin: 16mm 18mm; }}
+        *, *::before, *::after {{ box-sizing: border-box; }}
+        body {{
+            font-family: 'Times New Roman', Times, Georgia, serif;
+            color: #111827;
+            background: #ffffff;
+            padding: 0;
+            margin: 0;
+            line-height: 1.5;
+            font-size: 13px;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }}
+        .header-bar {{
+            border-bottom: 2px solid #0f172a;
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }}
+        .brand-title {{
+            font-family: 'Times New Roman', Times, Georgia, serif;
+            font-size: 20px;
+            font-weight: bold;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #0f172a;
+        }}
+        .brand-sub {{
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 2px;
+        }}
+        h1 {{
+            font-family: 'Times New Roman', Times, Georgia, serif;
+            font-size: 22px;
+            font-weight: bold;
+            margin: 0 0 6px 0;
+            color: #0f172a;
+            line-height: 1.25;
+        }}
+        .scenario-meta {{
+            font-size: 12px;
+            color: #475569;
+            margin-bottom: 18px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e2e8f0;
+        }}
+        .verdict-box {{
+            background: #fafafa;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 14px 18px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            page-break-inside: avoid;
+        }}
+        .verdict-badge {{
+            font-family: 'Times New Roman', Times, Georgia, serif;
+            font-weight: bold;
+            font-size: 12px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #0f172a;
+            margin-bottom: 4px;
+        }}
+        .verdict-headline {{
+            font-family: 'Times New Roman', Times, Georgia, serif;
+            font-size: 15px;
+            font-weight: bold;
+            color: #0f172a;
+            margin: 0;
+        }}
+        .risk-score {{
+            font-family: 'Times New Roman', Times, Georgia, serif;
+            font-size: 26px;
+            font-weight: bold;
+            color: #b91c1c;
+            line-height: 1;
+            text-align: right;
+        }}
+        .section {{ margin-bottom: 20px; page-break-inside: avoid; }}
+        h2 {{
+            font-family: 'Times New Roman', Times, Georgia, serif;
+            font-size: 15px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #0f172a;
+            border-bottom: 1.5px solid #cbd5e1;
+            padding-bottom: 4px;
+            margin: 0 0 10px 0;
+        }}
+        h3 {{
+            font-family: 'Times New Roman', Times, Georgia, serif;
+            font-size: 13px;
+            font-weight: bold;
+            color: #0f172a;
+            margin: 0 0 4px 0;
+        }}
+        .grid-2 {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }}
+        .card {{
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 10px 12px;
+            background: #fafafa;
+        }}
+        .card-adv {{ border-left: 3px solid #16a34a; }}
+        .card-dis {{ border-left: 3px solid #dc2626; }}
+        ul {{ margin: 4px 0 0 0; padding-left: 18px; }}
+        li {{ margin-bottom: 5px; line-height: 1.45; }}
+        .footer-bar {{
+            margin-top: 28px;
+            padding-top: 8px;
+            border-top: 1px solid #cbd5e1;
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: #94a3b8;
+        }}
     </style>
 </head>
 <body>
+    <div class="header-bar">
+        <div>
+            <div class="brand-title">LOKI INTELLIGENCE</div>
+            <div class="brand-sub">Autonomous Multi-Agent Swarm Simulation & Forecast</div>
+        </div>
+        <div style="text-align: right; font-size: 11px; color: #475569;">
+            <div><strong>Generated:</strong> {rep['generatedAt']}</div>
+            <div><strong>Classification:</strong> Internal Strategic Briefing</div>
+        </div>
+    </div>
+
     <h1>{rep['title']}</h1>
-    <div class="meta">Generated: {rep['generatedAt']} | Scenario: {rep['scenarioName']} | Document: {rep['documentName']}</div>
+    <div class="scenario-meta">
+        <strong>Scenario:</strong> {rep['scenarioName']}
+    </div>
 
-    <div class="score-box">
-        <div style="font-size: 11px; text-transform: uppercase; font-weight: bold; color: #71717a;">Overall Risk Score</div>
-        <div class="score">{rep['risk_score']} / 100</div>
-        <div style="font-size: 12px; font-weight: 600; color: #dc2626;">Primary Concern: {rep['primary_concern']}</div>
+    <div class="verdict-box">
+        <div style="max-width: 70%;">
+            <div class="verdict-badge">Decision Verdict: {verdict}</div>
+            <div class="verdict-headline">{one_line}</div>
+            <div style="font-size: 11px; color: #475569; margin-top: 4px;">
+                <strong>Primary Concern:</strong> {rep['primary_concern']}
+            </div>
+        </div>
+        <div style="border-left: 1px solid #cbd5e1; padding-left: 16px;">
+            <div class="risk-score">{rep['risk_score']} / 100</div>
+            <div style="font-size: 10px; text-transform: uppercase; font-weight: bold; color: #64748b; margin-top: 2px;">Overall Risk Score</div>
+        </div>
     </div>
 
     <div class="section">
-        <h2>Executive Summary</h2>
-        <p style="font-size: 13px;">{rep['executive_summary']}</p>
+        <h2>1. Executive Summary</h2>
+        <p style="margin: 0; text-align: justify;">{rep['executive_summary']}</p>
     </div>
 
-    <div class="section">
-        <h2>Key Risk Vectors</h2>
-        <ul>
-            {"".join(f"<li>{r}</li>" for r in rep['keyRisks'])}
-        </ul>
-    </div>
+    {(f'''<div class="section">
+        <h2>2. Strategic Trade-Off Analysis</h2>
+        <div class="grid-2">
+            <div class="card card-adv">
+                <h3 style="color: #15803d;">Strategic Advantages (Value Catalysts)</h3>
+                <ul>{adv_html}</ul>
+            </div>
+            <div class="card card-dis">
+                <h3 style="color: #b91c1c;">Strategic Disadvantages (Operational Vulnerabilities)</h3>
+                <ul>{dis_html}</ul>
+            </div>
+        </div>
+        {f'<div class="card" style="margin-top: 10px; border-left: 3px solid #0f172a;"><h3>Net Executive Verdict: {net_verdict}</h3><p style="margin: 0; font-size: 12px; color: #334155;">{net_verdict_expl}</p></div>' if net_verdict else ''}
+    </div>''') if (advantages or disadvantages or net_verdict) else ''}
 
-    <div class="section">
-        <h2>Recommended Strategic Actions</h2>
-        <ul>
-            {"".join(f"<li>{a}</li>" for a in rep['recommendedInvestigationAreas'])}
-        </ul>
+    {(f'''<div class="section">
+        <h2>3. Key Findings & Market Pushback</h2>
+        {pushback_html}
+    </div>''') if pushback else ''}
+
+    {(f'''<div class="section">
+        <h2>4. Recommended Strategic Action Playbook</h2>
+        {playbook_html}
+    </div>''') if playbook else ''}
+
+    {(f'''<div class="section">
+        <h2>5. Key Risk Vectors & Investigation Areas</h2>
+        {f'<h3>Identified Risk Vectors:</h3><ul>{risks_html}</ul>' if key_risks else ''}
+        {f'<h3 style="margin-top: 10px;">Recommended Deep-Dive Areas:</h3><ul>{actions_html}</ul>' if rec_areas else ''}
+    </div>''') if (key_risks or rec_areas) else ''}
+
+    <div class="footer-bar">
+        <span>Generated by LOKI Multi-Agent Swarm Intelligence</span>
+        <span>Scenario Equilibrium Synthesis · Page 1 of 1</span>
     </div>
 </body>
 </html>"""

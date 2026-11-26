@@ -5,7 +5,6 @@ import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import {
   Download,
-  Share2,
   ShieldAlert,
   Sparkles,
   TrendingUp,
@@ -45,6 +44,7 @@ import {
 } from "@/lib/api/scenarioApi";
 import { ScenarioStatusBanner } from "@/components/layout/ScenarioStatusBanner";
 import { GeneratingSimulationCard } from "@/components/layout/GeneratingSimulationCard";
+import { exportReportToPdf } from "@/lib/utils/exportReportPdf";
 
 function ReportsContent({
   currentRound,
@@ -202,10 +202,10 @@ function ReportsContent({
     (activeReport as any)?.one_line_verdict ||
     (activeReport as any)?.oneLineVerdict ||
     (decisionVerdict === "CONDITIONAL_GO"
-      ? `Conditional approval for '${activeReport?.scenarioName || "proposal"}': Establish deterministic safety gates and stakeholder onboarding before full rollout.`
+      ? "Conditional Go: Commercial adoption is viable provided safety checkpoints and stakeholder onboarding are deployed before rollout."
       : decisionVerdict === "HOLD"
-        ? `Hold deployment for '${activeReport?.scenarioName || "proposal"}': Address critical compliance and stakeholder friction voiced by dissenting channels.`
-        : `Proceed with phased rollout for '${activeReport?.scenarioName || "proposal"}' while maintaining continuous telemetry across active channels.`);
+        ? "Hold Deployment: Address operational bottlenecks and compliance pushback before release."
+        : "Proceed with Phased Deployment: Maintain continuous telemetry across active operational channels.");
 
   const sentiment = (activeReport as any)?.sentimentBreakdown || {
     positive: (activeReport as any)?.pos_pct ?? 0,
@@ -299,33 +299,38 @@ function ReportsContent({
                 <Sparkles className="h-3.5 w-3.5" /> LIVE SIMULATION SYNTHESIS · {activeReport.generatedAt}
               </div>
               <h1 className="font-display text-2xl font-bold text-ink mt-1">
-                {activeReport.title}
+                {activeReport.title && activeReport.title.toLowerCase() !== "scenario"
+                  ? activeReport.title
+                  : `Executive Forecast Report: ${activeReport.scenarioName || "Strategy Simulation"}`}
               </h1>
               <p className="text-xs text-muted font-mono mt-0.5">
-                Scenario: {activeReport.scenarioName} · Source: {activeDoc}
+                Scenario: {activeReport.scenarioName}
               </p>
             </div>
 
             <div className="flex items-center gap-2">
               <button
-                onClick={() => reportApi.exportReport(getActiveScenarioId() || activeReport.id, "pdf")}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-accent text-white text-xs font-semibold hover:opacity-90 transition-all shadow-md shadow-accent/20"
+                onClick={() => {
+                  exportReportToPdf({
+                    title: activeReport.title,
+                    scenarioName: activeReport.scenarioName,
+                    generatedAt: activeReport.generatedAt,
+                    decisionVerdict: decisionVerdict,
+                    oneLineVerdict: oneLineVerdict,
+                    overallRiskScore: riskScore,
+                    primaryConcern: primaryConcern,
+                    executiveSummary: cleanExecSummary,
+                    playbook: rawPlaybook,
+                    tradeoff: rawTradeoff,
+                    pushback: rawPushback,
+                    keyRisks: activeReport.keyRisks,
+                    recommendedActions: activeReport.recommendedInvestigationAreas,
+                  });
+                }}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-accent text-white text-xs font-semibold hover:opacity-90 transition-all shadow-md shadow-accent/20 cursor-pointer"
+                title="Export Executive Report to PDF"
               >
                 <Download className="h-4 w-4" /> Export PDF
-              </button>
-              <button
-                onClick={() => reportApi.exportReport(getActiveScenarioId() || activeReport.id, "json")}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-raised border border-line text-muted hover:text-ink text-xs font-mono font-semibold transition-all"
-                title="Export JSON Data"
-              >
-                <FileText className="h-4 w-4" /> JSON
-              </button>
-              <button
-                onClick={() => alert("Shareable report link copied to clipboard.")}
-                className="p-2 rounded-xl bg-raised border border-line text-muted hover:text-ink transition-all"
-                title="Share Report"
-              >
-                <Share2 className="h-4 w-4" />
               </button>
             </div>
           </div>

@@ -37,6 +37,11 @@ export const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({
       } else {
         setActiveDocName(null);
       }
+      setFile(null);
+      setScenarioTitle("");
+      setScenarioDescription("");
+      setStatus("IDLE");
+      setProgress(0);
     }
   }, [isOpen]);
 
@@ -58,8 +63,9 @@ export const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({
 
   const startIngestion = (selectedFile: File) => {
     setFile(selectedFile);
-    if (!scenarioTitle) {
-      setScenarioTitle(selectedFile.name.replace(/\.[^/.]+$/, "") + " Scenario");
+    if (!scenarioTitle.trim()) {
+      const cleanBase = selectedFile.name.replace(/\.[^/.]+$/, "").replace(/_/g, " ").trim();
+      setScenarioTitle(cleanBase);
     }
     setStatus("UPLOADING");
     setProgress(20);
@@ -86,8 +92,11 @@ export const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({
   };
 
   const handleConfirm = async () => {
-    const docName = file ? file.name : "AeroFlow_Cloud_Migration_Strategy.pdf";
-    const titleToSave = scenarioTitle.trim() || (file ? file.name.replace(/\.[^/.]+$/, "") + " Scenario" : "AeroFlow Cloud Migration Scenario");
+    const docName = file ? file.name : (activeDocName || "Strategy_Document.pdf");
+    const fallbackTitle = file
+      ? file.name.replace(/\.[^/.]+$/, "").replace(/_/g, " ").trim()
+      : (activeDocName ? activeDocName.replace(/\.[^/.]+$/, "").replace(/_/g, " ").trim() : "Custom Strategy Scenario");
+    const titleToSave = scenarioTitle.trim() || fallbackTitle;
     const descToSave = scenarioDescription.trim() || `Strategy simulation scenario based on ${docName}`;
 
     setIsSubmitting(true);

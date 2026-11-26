@@ -80,13 +80,17 @@ export const Header: React.FC<HeaderProps> = ({
       const isDocValid = !!(doc && doc.trim().length > 0 && doc !== "No document loaded");
       setHasDoc(isDocValid);
       if (isDocValid) {
+        const scenName =
+          localStorage.getItem("LOKI_ACTIVE_SCENARIO_NAME") ||
+          localStorage.getItem("SWARMLENS_ACTIVE_SCENARIO_NAME");
         const scenDesc =
           localStorage.getItem("SWARMLENS_ACTIVE_SCENARIO_DESC") ||
           localStorage.getItem("LOKI_ACTIVE_SCENARIO_DESC");
         const descPreview = scenDesc
           ? ` · ${scenDesc.length > 50 ? scenDesc.slice(0, 50) + "..." : scenDesc}`
           : "";
-        setDocSubtitle(`${doc}${descPreview}`);
+        const displayTitle = scenName && scenName.trim() ? scenName : doc;
+        setDocSubtitle(`${displayTitle}${descPreview}`);
       } else {
         setDocSubtitle("");
       }

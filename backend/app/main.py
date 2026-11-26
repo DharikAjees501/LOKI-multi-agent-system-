@@ -49,10 +49,11 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 # Sliding Window Rate Limiting Middleware
 app.add_middleware(RateLimitMiddleware)
 
-# CORS Setup - Strict Whitelist for HttpOnly Cookie Authentication
+# CORS Setup - Strict Whitelist for HttpOnly Cookie Authentication with Vercel support
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=[
@@ -82,7 +83,8 @@ async def csrf_origin_middleware(request: Request, call_next):
                 "http://127.0.0.1:8000",
             ])
             norm = origin.rstrip("/")
-            if norm not in allowed and not any(norm.startswith(a.rstrip("/")) for a in allowed):
+            is_vercel = norm.endswith(".vercel.app") or "vercel.app" in norm
+            if not is_vercel and norm not in allowed and not any(norm.startswith(a.rstrip("/")) for a in allowed):
                 logger.warning(log_csrf_blocked(origin, request.url.path))
                 return JSONResponse(
                     status_code=403,

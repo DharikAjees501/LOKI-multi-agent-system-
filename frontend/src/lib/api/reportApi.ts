@@ -166,13 +166,28 @@ class ReportApiService {
         });
         if (res.ok) {
           const html = await res.text();
-          const printWindow = window.open("", "_blank");
-          if (printWindow) {
-            printWindow.document.write(html);
-            printWindow.document.close();
+          let iframe = document.getElementById("__loki_pdf_iframe") as HTMLIFrameElement;
+          if (!iframe) {
+            iframe = document.createElement("iframe");
+            iframe.id = "__loki_pdf_iframe";
+            iframe.style.position = "fixed";
+            iframe.style.right = "0";
+            iframe.style.bottom = "0";
+            iframe.style.width = "0";
+            iframe.style.height = "0";
+            iframe.style.border = "none";
+            iframe.style.visibility = "hidden";
+            document.body.appendChild(iframe);
+          }
+          const doc = iframe.contentWindow?.document || iframe.contentDocument;
+          if (doc) {
+            doc.open();
+            doc.write(html);
+            doc.close();
             setTimeout(() => {
-              printWindow.print();
-            }, 500);
+              iframe.contentWindow?.focus();
+              iframe.contentWindow?.print();
+            }, 350);
             return;
           }
         }
