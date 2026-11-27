@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { GeneratingSimulationCard } from "@/components/layout/GeneratingSimulationCard";
-import { ShieldAlert, Users, Network, FolderGit2, ArrowRight, Play, Sparkles, Activity, AlertTriangle, Layers, FileUp } from "lucide-react";
+import { ShieldAlert, Users, Network, FolderGit2, ArrowRight, Play, Sparkles, Activity, AlertTriangle, Layers, FileUp, BarChart3 } from "lucide-react";
 import { reportApi } from "@/lib/api/reportApi";
 import { useAuth } from "@/context/AuthContext";
 import { authService } from "@/lib/api/authService";
@@ -15,7 +15,7 @@ export default function OverviewPage() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const [risksData, setRisksData] = useState<any>(null);
-  const [turningPoints, setTurningPoints] = useState<any[]>([]);
+  const [sentimentData, setSentimentData] = useState<any>(null);
   const [activeDoc, setActiveDoc] = useState<string | null>(null);
   const [activeScenario, setActiveScenario] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -51,7 +51,7 @@ export default function OverviewPage() {
           setActiveDoc(null);
           setActiveScenario(null);
           setRisksData(null);
-          setTurningPoints([]);
+          setSentimentData(null);
           setSummaryData(null);
           setIsInitializing(false);
         }, 0);
@@ -74,7 +74,7 @@ export default function OverviewPage() {
     const doc = getActiveDocName();
     if (!doc) {
       setRisksData(null);
-      setTurningPoints([]);
+      setSentimentData(null);
       setSummaryData(null);
       return;
     }
@@ -83,15 +83,15 @@ export default function OverviewPage() {
     if (!activeId) return;
 
     try {
-      const [rData, tpData, sumData] = await Promise.all([
+      const [rData, sumData, sentData] = await Promise.all([
         reportApi.getRisks(activeId),
-        reportApi.getTurningPoints(activeId),
         reportApi.getReportSummary(activeId),
+        reportApi.getSentimentTimeSeries(activeId),
       ]);
 
       setRisksData(rData);
-      setTurningPoints(tpData || []);
       if (sumData) setSummaryData(sumData);
+      if (sentData) setSentimentData(sentData);
     } catch (err) {
       console.warn("[DashboardPage] Error loading dashboard data:", err);
     }
@@ -124,6 +124,18 @@ export default function OverviewPage() {
   const overallRisk = summaryData?.risk_score ?? (risksData?.overallRiskScore ?? 50);
   const severityThreshold = overallRisk >= 70 ? "HIGH" : overallRisk >= 40 ? "MODERATE" : "LOW";
   const keyRisks = (summaryData?.risk_vectors && summaryData.risk_vectors.length > 0) ? summaryData.risk_vectors : (risksData?.keyRisks ?? []);
+
+  const rawPos = Number(sentimentData?.breakdown?.positive ?? summaryData?.sentiment?.positive_pct ?? 50);
+  const rawNeu = Number(sentimentData?.breakdown?.neutral ?? summaryData?.sentiment?.neutral_pct ?? 25);
+  const rawNeg = Number(sentimentData?.breakdown?.negative ?? summaryData?.sentiment?.negative_pct ?? 15);
+  const rawCrit = Number(sentimentData?.breakdown?.critical ?? summaryData?.sentiment?.critical_pct ?? 10);
+
+  const totalRaw = rawPos + rawNeu + rawNeg + rawCrit;
+  const safeTotal = totalRaw > 0 ? totalRaw : 100;
+  const posPct = Math.round((rawPos / safeTotal) * 100);
+  const neuPct = Math.round((rawNeu / safeTotal) * 100);
+  const negPct = Math.round((rawNeg / safeTotal) * 100);
+  const critPct = Math.max(0, 100 - (posPct + neuPct + negPct));
 
   return (
     <AppShell title="PLATFORM OVERVIEW" subtitle="EXECUTIVE AI SIMULATION & RISK ENGINE">
@@ -317,42 +329,116 @@ export default function OverviewPage() {
                 </div>
               </div>
 
-              {/* Simulation Turning Points Card */}
-              <div className="rounded-3xl border border-line/80 bg-surface/90 p-6 space-y-4 shadow-xl">
-                <div className="flex items-center justify-between border-b border-line/60 pb-3">
-                  <h3 className="font-display text-sm font-bold text-ink flex items-center gap-2">
-                    <Activity className="h-4 w-4 text-accent" /> CRITICAL TURNING POINTS
-                  </h3>
-                  <Link
-                    href="/reports"
-                    className="text-xs font-mono text-accent hover:underline flex items-center gap-1 font-semibold"
-                  >
-                    View Report <ArrowRight className="h-3 w-3" />
-                  </Link>
-                </div>
+              {/* Swarm Sentiment & Consensus Stacked Bar Card */}
+              <div className="rounded-3xl border border-line/80 bg-surface/90 p-6 space-y-5 shadow-xl flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between border-b border-line/60 pb-3">
+                    <h3 className="font-display text-sm font-bold text-ink flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4 text-emerald-500" /> SWARM SENTIMENT & CONSENSUS
+                    </h3>
+                    <span className="text-[11px] font-mono font-bold text-muted uppercase">
+                      200 Agent Nodes
+                    </span>
+                  </div>
 
-                <div className="space-y-3">
-                  {turningPoints.length === 0 ? (
-                    <div className="p-4 text-center text-xs font-mono text-muted">No turning points generated yet.</div>
-                  ) : (
-                    turningPoints.slice(0, 3).map((tp: any, tpIdx: number) => (
-                      <div
-                        key={tp.id ? `dash-tp-${tp.id}-${tpIdx}` : `dash-tp-${tpIdx}`}
-                        className="p-4 rounded-2xl bg-base/60 border border-line/60 flex items-start gap-3 hover:border-accent/40 transition-all"
-                      >
-                        <span className="h-7 w-7 rounded-xl bg-accent/15 text-accent font-mono text-xs font-bold flex items-center justify-center shrink-0 border border-accent/20">
-                          R{tp.round}
-                        </span>
-                        <div className="min-w-0 flex-1 space-y-0.5">
-                          <div className="flex items-center justify-between">
-                            <p className="text-xs font-bold text-ink">{tp.event}</p>
-                            <span className="text-[9px] font-mono text-accent2 font-bold uppercase">{tp.severity}</span>
-                          </div>
-                          <p className="text-[11px] text-muted leading-relaxed line-clamp-1">{tp.impact}</p>
+                  <div className="mt-4 space-y-4">
+                    {/* Multi-Segment Stacked Progress Bar */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center text-[11px] font-mono text-muted">
+                        <span>Equilibrium Distribution</span>
+                        <span className="text-ink font-bold">{posPct}% Positive Alignment</span>
+                      </div>
+                      <div className="h-5 w-full bg-raised rounded-full overflow-hidden border border-line/80 flex p-0.5 shadow-inner">
+                        {posPct > 0 && (
+                          <div
+                            style={{ width: `${posPct}%` }}
+                            className="h-full bg-emerald-500 rounded-l-full transition-all duration-500"
+                            title={`Positive: ${posPct}%`}
+                          />
+                        )}
+                        {neuPct > 0 && (
+                          <div
+                            style={{ width: `${neuPct}%` }}
+                            className="h-full bg-slate-400 dark:bg-slate-500 transition-all duration-500"
+                            title={`Neutral: ${neuPct}%`}
+                          />
+                        )}
+                        {negPct > 0 && (
+                          <div
+                            style={{ width: `${negPct}%` }}
+                            className="h-full bg-amber-500 transition-all duration-500"
+                            title={`Negative: ${negPct}%`}
+                          />
+                        )}
+                        {critPct > 0 && (
+                          <div
+                            style={{ width: `${critPct}%` }}
+                            className="h-full bg-rose-500 rounded-r-full transition-all duration-500"
+                            title={`Critical: ${critPct}%`}
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 4 Discrete Stance Breakdown Metrics */}
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div className="p-3 rounded-2xl bg-base/60 border border-line/60 space-y-1">
+                        <div className="flex items-center gap-1.5 text-[11px] font-mono text-muted">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                          <span className="truncate">Positive Support</span>
+                        </div>
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-base font-extrabold text-emerald-500 font-mono">{posPct}%</span>
+                          <span className="text-[10px] font-mono text-muted">~{Math.round(posPct * 2)} agents</span>
                         </div>
                       </div>
-                    ))
-                  )}
+
+                      <div className="p-3 rounded-2xl bg-base/60 border border-line/60 space-y-1">
+                        <div className="flex items-center gap-1.5 text-[11px] font-mono text-muted">
+                          <span className="h-2 w-2 rounded-full bg-slate-400 dark:bg-slate-500 shrink-0" />
+                          <span className="truncate">Neutral / Balanced</span>
+                        </div>
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-base font-extrabold text-slate-700 dark:text-slate-300 font-mono">{neuPct}%</span>
+                          <span className="text-[10px] font-mono text-muted">~{Math.round(neuPct * 2)} agents</span>
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-2xl bg-base/60 border border-line/60 space-y-1">
+                        <div className="flex items-center gap-1.5 text-[11px] font-mono text-muted">
+                          <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+                          <span className="truncate">Negative Friction</span>
+                        </div>
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-base font-extrabold text-amber-500 font-mono">{negPct}%</span>
+                          <span className="text-[10px] font-mono text-muted">~{Math.round(negPct * 2)} agents</span>
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-2xl bg-base/60 border border-line/60 space-y-1">
+                        <div className="flex items-center gap-1.5 text-[11px] font-mono text-muted">
+                          <span className="h-2 w-2 rounded-full bg-rose-500 shrink-0" />
+                          <span className="truncate">Critical Pushback</span>
+                        </div>
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-base font-extrabold text-rose-500 font-mono">{critPct}%</span>
+                          <span className="text-[10px] font-mono text-muted">~{Math.round(critPct * 2)} agents</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ground-Truth Status Pill */}
+                <div className="pt-2 border-t border-line/40 flex items-center justify-between text-[11px] font-mono">
+                  <span className="text-muted">Consensus State:</span>
+                  <span className="font-bold text-accent">
+                    {posPct >= 50
+                      ? "Majority Positive Alignment"
+                      : (negPct + critPct >= 40)
+                        ? "Active Dissent Resistance"
+                        : "Multi-Faction Equilibrium"}
+                  </span>
                 </div>
               </div>
             </div>
