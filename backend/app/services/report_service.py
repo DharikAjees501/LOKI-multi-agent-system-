@@ -1765,6 +1765,21 @@ SUPPORTING PERSPECTIVES:
                 if not saved_payload.get("risk_score") and rep_row:
                     saved_payload["risk_score"] = rep_row["risk_score"]
                     saved_payload["riskScore"] = rep_row["risk_score"]
+                if rep_row:
+                    if rep_row["pos_pct"] is not None:
+                        saved_payload["pos_pct"] = rep_row["pos_pct"]
+                    if rep_row["neu_pct"] is not None:
+                        saved_payload["neu_pct"] = rep_row["neu_pct"]
+                    if rep_row["neg_pct"] is not None:
+                        saved_payload["neg_pct"] = rep_row["neg_pct"]
+                    if rep_row["crit_pct"] is not None:
+                        saved_payload["crit_pct"] = rep_row["crit_pct"]
+                saved_payload["sentimentBreakdown"] = {
+                    "positive": saved_payload.get("pos_pct", 0),
+                    "neutral": saved_payload.get("neu_pct", 0),
+                    "negative": saved_payload.get("neg_pct", 0),
+                    "critical": saved_payload.get("crit_pct", 0)
+                }
                 if not saved_payload.get("generatedAt"):
                     saved_payload["generatedAt"] = datetime.now().strftime("%d %b %Y, %H:%M EST")
                 saved_payload["turning_points"] = []
@@ -1822,10 +1837,10 @@ SUPPORTING PERSPECTIVES:
             risks_data = self.get_risks(scenario_id, round_num=round_num)
             sentiment_data = self.get_sentiment(scenario_id)
             risk_score = risks_data.get("overallRiskScore", 50)
-            pos_pct = sentiment_data.get("breakdown", {}).get("positive", 30.0)
-            neu_pct = sentiment_data.get("breakdown", {}).get("neutral", 35.0)
-            neg_pct = sentiment_data.get("breakdown", {}).get("negative", 20.0)
-            crit_pct = sentiment_data.get("breakdown", {}).get("critical", 15.0)
+            pos_pct = sentiment_data.get("breakdown", {}).get("positive", 0.0)
+            neu_pct = sentiment_data.get("breakdown", {}).get("neutral", 0.0)
+            neg_pct = sentiment_data.get("breakdown", {}).get("negative", 0.0)
+            crit_pct = sentiment_data.get("breakdown", {}).get("critical", 0.0)
             total_agents = 200
 
             # Query real live agents for dynamically grounded summary

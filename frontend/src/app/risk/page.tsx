@@ -120,16 +120,19 @@ export default function RiskSynthesisPage() {
 
   const overallRisk = summaryData?.risk_score ?? (risksData?.overallRiskScore ?? 50);
   const severityThreshold = overallRisk >= 70 ? "HIGH" : overallRisk >= 40 ? "MODERATE" : "LOW";
-  const primaryConcern = risksData?.primaryConcern ?? "Stakeholder Backlash & Market Churn";
+  const primaryConcern = summaryData?.primary_concern ?? risksData?.primaryConcern ?? "Stakeholder Backlash & Market Churn";
   const keyRisks = (summaryData?.risk_vectors && summaryData.risk_vectors.length > 0) ? summaryData.risk_vectors : (risksData?.keyRisks ?? []);
-  const breakdown = summaryData?.sentiment
-    ? {
-        positive: summaryData.sentiment.positive_pct,
-        neutral: summaryData.sentiment.neutral_pct,
-        negative: summaryData.sentiment.negative_pct,
-        critical: summaryData.sentiment.critical_pct,
-      }
-    : (sentimentData?.breakdown ?? { positive: 25, neutral: 40, negative: 25, critical: 10 });
+  
+  const rawPos = summaryData?.sentiment?.positive_pct ?? sentimentData?.breakdown?.positive ?? 0;
+  const rawNeu = summaryData?.sentiment?.neutral_pct ?? sentimentData?.breakdown?.neutral ?? 0;
+  const rawNeg = summaryData?.sentiment?.negative_pct ?? sentimentData?.breakdown?.negative ?? 0;
+  const rawCrit = summaryData?.sentiment?.critical_pct ?? sentimentData?.breakdown?.critical ?? 0;
+  const breakdown = {
+    positive: Math.round(Number(rawPos)),
+    neutral: Math.round(Number(rawNeu)),
+    negative: Math.round(Number(rawNeg)),
+    critical: Math.round(Number(rawCrit)),
+  };
   const matrixItems = consensusData?.items ?? [];
   const totalItems = matrixItems.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));

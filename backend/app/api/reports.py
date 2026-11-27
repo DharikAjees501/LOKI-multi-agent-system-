@@ -182,16 +182,21 @@ async def get_report_summary(scenario_id: str | None = Query(None)):
             "overall_consensus": 0,
             "sentimentBreakdown": {"positive": 0, "neutral": 0, "negative": 0, "critical": 0}
         }
-    sent = rep.get("sentimentBreakdown", {}) or {}
+    sent = rep.get("sentimentBreakdown") or rep.get("sentiment_breakdown") or {}
+    pos = rep.get("pos_pct") if rep.get("pos_pct") is not None else sent.get("positive", 0.0)
+    neu = rep.get("neu_pct") if rep.get("neu_pct") is not None else sent.get("neutral", 0.0)
+    neg = rep.get("neg_pct") if rep.get("neg_pct") is not None else sent.get("negative", 0.0)
+    crit = rep.get("crit_pct") if rep.get("crit_pct") is not None else sent.get("critical", 0.0)
+
     return {
         "scenario_id": scen_id,
-        "risk_score": rep.get("risk_score", 50),
-        "primary_concern": rep.get("primary_concern", "Executive Strategy Risk"),
+        "risk_score": rep.get("risk_score", 0),
+        "primary_concern": rep.get("primary_concern", ""),
         "sentiment": {
-            "positive_pct": sent.get("positive", 50.0),
-            "neutral_pct": sent.get("neutral", 25.0),
-            "negative_pct": sent.get("negative", 15.0),
-            "critical_pct": sent.get("critical", 10.0)
+            "positive_pct": float(pos),
+            "neutral_pct": float(neu),
+            "negative_pct": float(neg),
+            "critical_pct": float(crit)
         },
         "risk_vectors": rep.get("key_risks", []) or rep.get("keyRisks", [])
     }
