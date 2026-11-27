@@ -174,10 +174,10 @@ function SimulationWorkspaceContent({
   }, [currentRound, simulationStatus, phase]);
 
   return (
-    <div className="h-full w-full select-none flex flex-col space-y-6 pb-16">
+    <div className="w-full max-w-7xl mx-auto select-none flex flex-col space-y-6 pb-24">
           {!activeDoc ? (
             /* No Document State */
-            <div className="flex-1 rounded-3xl border border-dashed border-line bg-surface p-12 flex flex-col items-center justify-center text-center space-y-5 my-auto">
+            <div className="rounded-3xl border border-dashed border-line bg-surface p-12 flex flex-col items-center justify-center text-center space-y-5 my-8 min-h-[400px]">
               <div className="h-16 w-16 rounded-2xl bg-accent/10 border border-accent/30 text-accent flex items-center justify-center shadow-lg shadow-accent/10">
                 <Network className="h-8 w-8" />
               </div>
