@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import {
   Sparkles,
   Bell,
@@ -53,6 +53,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenUpload,
 }) => {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, isAuthenticated, openAuthModal, logout, refreshUser } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [apiKey, setApiKey] = useState<string | null>(null);
@@ -178,101 +179,98 @@ export const Header: React.FC<HeaderProps> = ({
           ) : null}
         </div>
 
-        {/* System Status Metrics - Sleek Compact Round & API Key Status Capsule */}
-        <div className="flex-1 hidden md:flex items-center justify-center gap-2.5 px-4">
-          <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-raised/70 border border-line/70 backdrop-blur-md shadow-2xs">
-            {/* Deliberation Round / Cycle Indicator */}
-            <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-surface border border-line/50 text-xs font-mono shadow-2xs">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span className="text-muted/80 font-medium text-[10.5px] tracking-wider uppercase">ROUND</span>
-              <span className="font-bold text-ink text-[11px]" suppressHydrationWarning>
-                {String(currentRound).padStart(2, "0")}
-                <span className="text-muted/50 font-normal"> / 05</span>
+        {/* System Status Metrics - Clean, non-nested status badges */}
+        <div className="flex-1 hidden md:flex items-center justify-center gap-2 px-4">
+          {/* Round Indicator */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-mono shadow-2xs">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-muted/80 font-medium text-[10px] tracking-wider uppercase">ROUND</span>
+            <span className="font-bold text-ink text-xs" suppressHydrationWarning>
+              {String(currentRound).padStart(2, "0")}
+              <span className="text-muted/50 font-normal"> / 05</span>
+            </span>
+          </div>
+
+          {/* API Key Status Pill */}
+          <button
+            onClick={() => setIsKeyModalOpen(true)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-mono transition-all hover:bg-raised shadow-2xs cursor-pointer ${
+              isKeyActive
+                ? "bg-surface border-line text-emerald-600"
+                : "bg-amber-500/10 border-amber-500/30 text-amber-600 hover:bg-amber-500/20"
+            }`}
+            title={isKeyActive ? "Click to manage API Keys" : "Click to configure API Key"}
+          >
+            <Key className="h-3 w-3 shrink-0 text-muted" />
+            <span className="font-medium text-muted/80 text-[10px] tracking-wider uppercase">API KEY</span>
+            <div className="flex items-center gap-1.5 pl-1.5 border-l border-line">
+              <span className={`h-1.5 w-1.5 rounded-full ${isKeyActive ? "bg-emerald-500 shadow-xs shadow-emerald-500/50" : "bg-amber-500 animate-pulse"}`} />
+              <span className={`text-[10.5px] font-bold ${isKeyActive ? "text-emerald-600" : "text-amber-600"}`}>
+                {isKeyActive ? "ACTIVE" : "CONNECT"}
               </span>
             </div>
-
-            {/* API Key Status Pill */}
-            <button
-              onClick={() => setIsKeyModalOpen(true)}
-              className={`flex items-center gap-2 px-2.5 py-1 rounded-full border text-xs font-mono transition-all hover:scale-102 cursor-pointer shadow-2xs ${
-                isKeyActive
-                  ? "bg-surface hover:bg-line/40 border-line/50 text-emerald-600"
-                  : "bg-amber-500/10 border-amber-500/30 text-amber-600 hover:bg-amber-500/20"
-              }`}
-              title={isKeyActive ? "Click to manage API Keys & Fallback pool" : "Click to configure Gemini or Groq API Key"}
-            >
-              <Key className="h-3 w-3 shrink-0 text-muted" />
-              <span className="font-medium text-muted/80 text-[10.5px] tracking-wider uppercase">API KEY</span>
-              <div className="flex items-center gap-1.5 pl-1.5 border-l border-line/60">
-                <span className={`h-1.5 w-1.5 rounded-full ${isKeyActive ? "bg-emerald-500 shadow-xs shadow-emerald-500/50" : "bg-amber-500 animate-pulse"}`} />
-                <span className={`text-[10.5px] font-bold ${isKeyActive ? "text-emerald-600" : "text-amber-600"}`}>
-                  {isKeyActive ? "ACTIVE" : "CONNECT"}
-                </span>
-              </div>
-            </button>
-          </div>
+          </button>
         </div>
 
-        {/* Modern SaaS Quick Action Capsule */}
-        <div className="flex items-center gap-2">
+        {/* Action Controls - Clean, unbundled header buttons */}
+        <div className="flex items-center gap-2" ref={menuRef}>
+          {/* Delete Doc Button - Icon Only */}
           {hasDoc && (
             <button
               onClick={handleDeleteDoc}
               disabled={isDeleting}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 text-[11px] font-mono font-semibold transition-all shadow-2xs disabled:opacity-50"
-              title="Delete Document & Unload Workspace"
+              className="h-8.5 w-8.5 rounded-xl flex items-center justify-center text-muted hover:text-rose-600 hover:bg-rose-500/10 border border-line hover:border-rose-500/30 transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
+              title={isDeleting ? "Deleting Document..." : "Delete Document"}
             >
-              <Trash2 className={`h-3.5 w-3.5 ${isDeleting ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">{isDeleting ? "Deleting..." : "Delete Doc"}</span>
+              <Trash2 className={`h-4 w-4 ${isDeleting ? "animate-spin text-rose-500" : ""}`} />
             </button>
           )}
 
-          <div className="flex items-center gap-1.5 p-1 rounded-full bg-raised/60 border border-line/70 backdrop-blur-md shadow-2xs relative" ref={menuRef}>
-            {/* Home / Return Button */}
-            <Link
-              href="/"
-              className="h-8 w-8 rounded-full bg-surface hover:bg-line/60 border border-line/60 flex items-center justify-center text-emerald-600 transition-all hover:scale-105"
-              title="Return to Landing Page"
-            >
-              <DoorOpen className="h-4 w-4" />
-            </Link>
+          {/* Exit / Return Button */}
+          <Link
+            href={pathname === "/dashboard" ? "/" : "/dashboard"}
+            className="h-8.5 w-8.5 rounded-xl flex items-center justify-center text-muted hover:text-ink hover:bg-raised border border-line hover:border-emerald-500/40 transition-colors shadow-2xs cursor-pointer group"
+            title={pathname === "/dashboard" ? "Exit to Landing Page" : "Exit to Platform Overview"}
+          >
+            <DoorOpen className="h-4 w-4 transition-colors group-hover:text-emerald-600" />
+          </Link>
 
-            {/* Primary CTA: New Simulation */}
-            <button
-              onClick={onOpenUpload}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-xs font-bold hover:shadow-md hover:shadow-emerald-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all"
-            >
-              <FileUp className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">New Simulation</span>
-            </button>
+          {/* New Simulation Button */}
+          <button
+            onClick={onOpenUpload}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-xs hover:shadow-md hover:shadow-emerald-600/20 transition-all cursor-pointer"
+          >
+            <FileUp className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">New Simulation</span>
+          </button>
 
-            {/* Profile Avatar / Google Sign-In Capsule */}
-            {mounted && isAuthenticated && user ? (
-              <div className="relative">
-                <button
-                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-full bg-surface hover:bg-line/60 border border-line/60 transition-all cursor-pointer group"
-                  title="Your Sessions & Account"
-                >
-                  {user.avatar_url || user.picture ? (
-                    <img
-                      src={user.avatar_url || user.picture}
-                      alt={user.full_name || "User"}
-                      className="h-6 w-6 rounded-full border border-line object-cover"
-                    />
-                  ) : (
-                    <div className="h-6 w-6 rounded-full bg-emerald-500/20 text-emerald-700 font-bold text-xs flex items-center justify-center">
-                      {(user.full_name || user.email || "U").charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <span className="hidden md:inline text-xs font-medium text-ink max-w-[100px] truncate">
-                    {user.full_name || user.email.split("@")[0]}
-                  </span>
-                  <ChevronDown className="h-3 w-3 text-muted group-hover:text-ink transition-transform" />
-                </button>
+          {/* Profile Avatar & Account Menu */}
+          {mounted && isAuthenticated && user ? (
+            <div className="relative">
+              <button
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                className="flex items-center gap-2 pl-1.5 pr-2.5 py-1 rounded-xl bg-surface hover:bg-raised border border-line transition-colors shadow-2xs cursor-pointer group"
+                title="Your Sessions & Account"
+              >
+                {user.avatar_url || user.picture ? (
+                  <img
+                    src={user.avatar_url || user.picture}
+                    alt={user.full_name || "User"}
+                    className="h-6 w-6 rounded-lg border border-line object-cover"
+                  />
+                ) : (
+                  <div className="h-6 w-6 rounded-lg bg-emerald-500/20 text-emerald-700 font-bold text-xs flex items-center justify-center">
+                    {(user.full_name || user.email || "U").charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <span className="hidden md:inline text-xs font-medium text-ink max-w-[100px] truncate">
+                  {user.full_name || user.email.split("@")[0]}
+                </span>
+                <ChevronDown className="h-3 w-3 text-muted group-hover:text-ink transition-transform" />
+              </button>
 
                 {/* "Your Sessions" & Profile Dropdown Drawer */}
                 {isUserMenuOpen && (
@@ -303,49 +301,8 @@ export const Header: React.FC<HeaderProps> = ({
                       </div>
                     </div>
 
-                    {/* Tier & Quota Status */}
-                    <div className="py-2.5 px-3 my-2.5 rounded-xl bg-raised border border-line flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {isKeyActive ? (
-                          <>
-                            <Sparkles className="h-4 w-4 text-emerald-600" />
-                            <div>
-                              <span className="text-[11px] font-bold text-emerald-600 block">
-                                BYOK ACTIVE
-                              </span>
-                              <span className="text-[10px] font-mono text-muted">
-                                Unlimited Simulations
-                              </span>
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <Key className="h-4 w-4 text-amber-500" />
-                            <div>
-                              <span className="text-[11px] font-bold text-amber-600 block">
-                                API KEY
-                              </span>
-                              <span className="text-[10px] font-mono text-muted">
-                                Configure Gemini / Groq
-                              </span>
-                            </div>
-                          </>
-                        )}
-                      </div>
-
-                      <button
-                        onClick={() => {
-                          setIsUserMenuOpen(false);
-                          setIsKeyModalOpen(true);
-                        }}
-                        className="px-2 py-1 rounded-lg bg-surface border border-line text-[10px] font-mono font-bold text-ink hover:border-emerald-500/40 transition-colors"
-                      >
-                        {isKeyActive ? "Manage Keys" : "Connect Key"}
-                      </button>
-                    </div>
-
                     {/* "Your Sessions" Scenarios List */}
-                    <div className="py-2">
+                    <div className="py-2.5">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-muted">
                           YOUR SAVED SESSIONS
@@ -396,17 +353,17 @@ export const Header: React.FC<HeaderProps> = ({
                       </div>
                     </div>
 
-                    {/* Sign Out CTA */}
-                    <div className="pt-3 border-t border-line flex items-center justify-between">
+                    {/* Sign Out CTA - Unique Highlighted Button */}
+                    <div className="pt-2.5 border-t border-line">
                       <button
                         onClick={async () => {
                           setIsUserMenuOpen(false);
                           await logout();
                           window.location.href = "/";
                         }}
-                        className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-mono font-semibold text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all cursor-pointer"
+                        className="group w-full flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-xl bg-rose-500/10 hover:bg-rose-500/15 border border-rose-500/20 hover:border-rose-500/40 text-rose-600 dark:text-rose-400 font-display text-[11px] font-bold tracking-wider uppercase transition-all duration-200 shadow-xs hover:shadow-rose-500/10 cursor-pointer"
                       >
-                        <LogOut className="h-3.5 w-3.5" />
+                        <LogOut className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5 text-rose-500" />
                         <span>Sign Out of Workspace</span>
                       </button>
                     </div>
@@ -431,7 +388,6 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="h-7 w-20" />
             )}
           </div>
-        </div>
       </header>
 
       {/* Global API Key Modal */}

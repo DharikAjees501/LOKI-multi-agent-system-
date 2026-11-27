@@ -20,7 +20,6 @@ import {
   Globe,
   BarChart3,
   Cpu,
-  ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { AuthModal } from "@/components/auth/AuthModal";
@@ -57,11 +56,15 @@ export default function LandingPage() {
     <div className="min-h-screen bg-base text-ink font-body selection:bg-accent/20 selection:text-ink">
       {/* Top Navbar */}
       <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur-md border-b border-line shadow-xs">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between relative">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="h-10 w-10 rounded-2xl bg-accent text-white flex items-center justify-center shadow-lg shadow-accent/25 group-hover:scale-105 transition-transform">
-              <Waypoints className="h-6 w-6" />
+            <div className="h-10 w-10 rounded-2xl bg-white border border-emerald-500/30 flex items-center justify-center overflow-hidden shadow-md shadow-accent/20 group-hover:scale-105 transition-transform p-0.5">
+              <img
+                src="/logo.jpg"
+                alt="LOKI Logo"
+                className="h-full w-full object-cover rounded-xl"
+              />
             </div>
             <div>
               <span className="font-display text-xl font-extrabold tracking-tight text-ink block">
@@ -74,24 +77,17 @@ export default function LandingPage() {
           </Link>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden md:flex items-center gap-8 text-xs font-semibold text-ink/80">
+          <nav className="absolute left-1/2 -translate-x-1/2 hidden md:flex items-center gap-8 text-xs font-semibold text-ink/80">
             <a href="#features" className="hover:text-accent transition-colors">
               Features
             </a>
             <a href="#how-it-works" className="hover:text-accent transition-colors">
               How It Works
             </a>
-            <Link href="/use-cases" className="hover:text-accent transition-colors flex items-center gap-1 text-accent font-bold">
+            <Link href="/use-cases" className="hover:text-accent transition-colors flex items-center gap-1.5 text-accent font-bold">
               <span>Use Cases</span>
               <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
             </Link>
-            <button
-              onClick={handleLaunchSwarm}
-              className="hover:text-accent transition-colors flex items-center gap-1 font-mono text-accent cursor-pointer"
-            >
-              <span>Platform App</span>
-              <ChevronRight className="h-3 w-3" />
-            </button>
           </nav>
 
           {/* Direct Launch & Sign-In Actions */}
@@ -425,8 +421,12 @@ export default function LandingPage() {
       <footer className="py-12 border-t border-line bg-surface text-xs text-muted">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3">
-            <div className="h-7 w-7 rounded-xl bg-accent text-white flex items-center justify-center font-bold">
-              <Waypoints className="h-4 w-4" />
+            <div className="h-8 w-8 rounded-xl bg-white border border-emerald-500/30 flex items-center justify-center overflow-hidden shadow-xs p-0.5">
+              <img
+                src="/logo.jpg"
+                alt="LOKI Logo"
+                className="h-full w-full object-cover rounded-lg"
+              />
             </div>
             <span className="font-display text-sm font-bold text-ink">LOKI</span>
             <span className="font-mono text-[10px]">© 2026 LOKI AI. All rights reserved.</span>

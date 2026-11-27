@@ -16,8 +16,6 @@ import {
   PanelLeftOpen,
 } from "lucide-react";
 
-import { getActiveDocName } from "@/lib/api/scenarioApi";
-
 interface SidebarProps {
   currentRound: number;
   totalRounds: number;
@@ -47,17 +45,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const asideRef = useRef<HTMLElement>(null);
 
   const [isCollapsed, setIsCollapsedState] = useState<boolean>(globalSidebarCollapsed);
-  const [activeDocName, setActiveDocName] = useState<string>("No document loaded");
-  const [activeScenarioName, setActiveScenarioName] = useState<string>("Awaiting Strategy File");
-
-  const syncActiveDoc = () => {
-    if (typeof window !== "undefined") {
-      const savedDoc = getActiveDocName();
-      const savedScen = localStorage.getItem("SWARMLENS_ACTIVE_SCENARIO_NAME") || localStorage.getItem("LOKI_ACTIVE_SCENARIO_NAME");
-      setActiveDocName(savedDoc || "No document loaded");
-      setActiveScenarioName(savedDoc ? (savedScen || "Custom Strategy Scenario") : "Awaiting Strategy File");
-    }
-  };
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -75,12 +62,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (asideRef.current) {
       asideRef.current.scrollTop = globalSidebarScrollTop;
     }
-
-    syncActiveDoc();
-    window.addEventListener("swarmlens_doc_updated", syncActiveDoc);
-    return () => {
-      window.removeEventListener("swarmlens_doc_updated", syncActiveDoc);
-    };
   }, [pathname]);
 
   const handleSidebarScroll = () => {
@@ -220,20 +201,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           );
         })}
       </div>
-
-      {/* Bottom Document Status Card */}
-      {!isCollapsed && (
-        <div className="p-3 border-t border-line shrink-0 bg-base/50">
-          <div className="p-3 rounded-2xl bg-surface border border-line space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono font-bold text-emerald-600 uppercase">Strategy Context</span>
-              <span className={`h-2 w-2 rounded-full ${activeDocName && activeDocName !== "No document loaded" ? "bg-emerald-500 animate-pulse" : "bg-muted/50"}`} />
-            </div>
-            <p className="text-xs font-bold text-ink truncate">{activeDocName}</p>
-            <p className="text-[10px] font-mono text-muted truncate">{activeScenarioName}</p>
-          </div>
-        </div>
-      )}
     </aside>
   );
 };

@@ -181,15 +181,19 @@ export default function UseCasesPage() {
       <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur-md border-b border-line shadow-xs">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:scale-105 transition-transform">
-              <Waypoints className="h-6 w-6" />
+            <div className="h-10 w-10 rounded-2xl bg-white border border-emerald-500/30 flex items-center justify-center overflow-hidden shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform p-0.5">
+              <img
+                src="/logo.jpg"
+                alt="LOKI Logo"
+                className="h-full w-full object-cover rounded-xl"
+              />
             </div>
             <div>
               <span className="font-display text-xl font-extrabold tracking-tight text-ink block">
-                SWARMLENS
+                LOKI
               </span>
               <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 uppercase font-bold tracking-widest block -mt-1">
-                AI SIMULATION PLATFORM
+                L.O.K.I. INTELLIGENCE PLATFORM
               </span>
             </div>
           </Link>
